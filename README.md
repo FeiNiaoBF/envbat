@@ -17,7 +17,8 @@ envbat/
     ├── 02-directories.sh  # 创建目录结构 + 符号链接
     ├── 03-config.sh       # 配置环境变量
     ├── 04-install.sh      # 安装基础工具
-    └── 05-verify.sh       # 验证配置结果
+    ├── 05-verify.sh       # 验证配置结果
+    └── popos-power.sh     # [独立] 交互式电源管理（空闲/锁屏延时）
 ```
 
 ## 使用方式
@@ -34,6 +35,10 @@ envbat/
 ```bash
 chmod +x popos/setup.sh
 sudo ./popos/setup.sh
+
+# 电源管理（独立工具，不需 root）
+chmod +x popos/popos-power.sh
+./popos/popos-power.sh
 ```
 
 ## 设计原则
