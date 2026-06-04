@@ -8,16 +8,16 @@
 #   source ~/.bashrc
 #
 # 模块文件 (popos/ 下):
-#   01-check.sh        — 系统环境检查
-#   02-directories.sh  — 目录结构 + 符号链接
-#   03-config.sh       — 环境变量注入
-#   04-install.sh      — 基础工具安装
-#   05-verify.sh       — 验收确认
-#   06-mirror.sh       — [工具] 镜像源切换（自动识别国内/海外）
-#   07-utils.sh        — [工具] 实用函数集（智能安装/系统更新/systemctl/暂停）
+#   check.sh        — 系统环境检查
+#   directories.sh  — 目录结构 + 符号链接
+#   config.sh       — 环境变量注入
+#   install.sh      — 基础工具安装
+#   verify.sh       — 验收确认
+#   mirror.sh       — [工具] 镜像源切换（自动识别国内/海外）
+#   utils.sh        — [工具] 实用函数集（智能安装/系统更新/systemctl/暂停）
 #
 # 注意:
-#   - 06/07 模块仅 source 不自动执行，供交互式使用
+#   - mirror.sh/utils.sh 仅 source 不自动执行，供交互式使用
 #   - 需要 sudo 时脚本会自动请求，建议直接以 sudo 运行。
 # ============================================================
 set -euo pipefail
@@ -25,22 +25,22 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 加载各模块
-# shellcheck source=01-check.sh
-source "$SCRIPT_DIR/01-check.sh"
-# shellcheck source=02-directories.sh
-source "$SCRIPT_DIR/02-directories.sh"
-# shellcheck source=03-config.sh
-source "$SCRIPT_DIR/03-config.sh"
-# shellcheck source=04-install.sh
-source "$SCRIPT_DIR/04-install.sh"
-# shellcheck source=05-verify.sh
-source "$SCRIPT_DIR/05-verify.sh"
+# shellcheck source=check.sh
+source "$SCRIPT_DIR/check.sh"
+# shellcheck source=directories.sh
+source "$SCRIPT_DIR/directories.sh"
+# shellcheck source=config.sh
+source "$SCRIPT_DIR/config.sh"
+# shellcheck source=install.sh
+source "$SCRIPT_DIR/install.sh"
+# shellcheck source=verify.sh
+source "$SCRIPT_DIR/verify.sh"
 
 # 实用工具模块（仅 source，不自动执行，交互式使用）
-# shellcheck source=06-mirror.sh
-source "$SCRIPT_DIR/06-mirror.sh"
-# shellcheck source=07-utils.sh
-source "$SCRIPT_DIR/07-utils.sh"
+# shellcheck source=mirror.sh
+source "$SCRIPT_DIR/mirror.sh"
+# shellcheck source=utils.sh
+source "$SCRIPT_DIR/utils.sh"
 
 # ----- 主流程 -----
 echo ""
