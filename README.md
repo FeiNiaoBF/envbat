@@ -12,12 +12,14 @@ envbat/
 │   ├── 01-check.ps1      # 检测已安装的编程语言环境
 │   └── 02-download.ps1   # 下载选取的编程语言安装包
 └── popos/                # Pop!_OS 环境配置
-    ├── setup.sh           # ── 入口：依次执行 01→05
+    ├── setup.sh           # ── 入口：依次执行 01→05（06/07 仅 source）
     ├── 01-check.sh        # 检测系统环境
     ├── 02-directories.sh  # 创建目录结构 + 符号链接
     ├── 03-config.sh       # 配置环境变量
     ├── 04-install.sh      # 安装基础工具
     ├── 05-verify.sh       # 验证配置结果
+    ├── 06-mirror.sh       # [工具] 镜像源切换（自动识别国内/海外）
+    ├── 07-utils.sh        # [工具] 实用函数集（智能安装/更新/systemctl/暂停）
     └── popos-power.sh     # [独立] 交互式电源管理（空闲/锁屏延时）
 ```
 
