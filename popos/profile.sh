@@ -58,8 +58,8 @@ export XDG_DATA_HOME="${INSTALL_BASE}/temp/xdg-data"
 export XDG_CACHE_HOME="${INSTALL_BASE}/temp/xdg-cache"
 export TMPDIR="${INSTALL_BASE}/temp"
 # Extend PATH with tools/bin
-if [ -d "${TOOLS_HOME}/bin" ]; then
-    export PATH="${TOOLS_HOME}/bin:${PATH}"
+if [ -d "\${TOOLS_HOME}/bin" ]; then
+    export PATH="\${TOOLS_HOME}/bin:\${PATH}"
 fi
 
 INSTALL_GO="${INSTALL_GO:-true}"
@@ -76,8 +76,44 @@ GIT_USER_NAME="${GIT_USER_NAME:-}"
 GIT_USER_EMAIL="${GIT_USER_EMAIL:-}"
 GO_VERSION="${GO_VERSION:-}"
 JAVA_VERSION="${JAVA_VERSION:-21}"
+
+# nvm
+export NVM_DIR="${INSTALL_BASE}/tools/nvm"
+[ -s "\$NVM_DIR/nvm.sh" ] && \. "\$NVM_DIR/nvm.sh"
+
+# pyenv
+export PYENV_ROOT="${INSTALL_BASE}/tools/pyenv"
+export PATH="\$PYENV_ROOT/bin:\$PATH"
+if command -v pyenv &>/dev/null; then
+    eval "\$(pyenv init -)"
+fi
+
+# Rust
+export RUSTUP_HOME="${INSTALL_BASE}/tools/rustup"
+export PATH="\${CARGO_HOME}/bin:\$PATH"
 PROFILEEOF
     ok "配置已保存: $PROFILE_FILE"
+
+    # Auto-source in .bashrc
+    local guard="# === envbat ==="
+    local source_line='if [ -f "$HOME/.config/envbat/profile.sh" ]; then source "$HOME/.config/envbat/profile.sh"; fi'
+    if ! grep -qF "$guard" "$HOME/.bashrc" 2>/dev/null; then
+        {
+            echo ""
+            echo "$guard"
+            echo "$source_line"
+        } >> "$HOME/.bashrc"
+        ok ".bashrc 已添加 envbat 加载"
+    fi
+    # Auto-source in .zshrc (if exists or will exist after oh-my-zsh install)
+    if [ ! -f "$HOME/.zshrc" ] || ! grep -qF "$guard" "$HOME/.zshrc" 2>/dev/null; then
+        {
+            echo ""
+            echo "$guard"
+            echo "$source_line"
+        } >> "$HOME/.zshrc" 2>/dev/null || true
+        [ -f "$HOME/.zshrc" ] && ok ".zshrc 已添加 envbat 加载"
+    fi
 }
 
 popos_clean_old_bashrc() {
