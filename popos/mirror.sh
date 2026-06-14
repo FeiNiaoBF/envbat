@@ -26,9 +26,17 @@ popos_setup_mirror() {
         echo "检测到国家: $country"
     fi
 
+    local tmp_script="/tmp/linuxmirrors_main.sh"
+
+    if ! curl -sSL -o "$tmp_script" https://linuxmirrors.cn/main.sh; then
+        echo "  [ERROR] 下载 linuxmirrors 脚本失败，跳过镜像源切换"
+        return 1
+    fi
+    chmod +x "$tmp_script"
+
     if [ "$country" = "CN" ]; then
         echo "国内网络，使用 Huawei Cloud 镜像源 ..."
-        bash <(curl -sSL https://linuxmirrors.cn/main.sh) \
+        bash "$tmp_script" \
             --source mirrors.huaweicloud.com \
             --protocol https \
             --use-intranet-source false \
@@ -40,7 +48,7 @@ popos_setup_mirror() {
             --pure-mode
     else
         echo "海外网络，使用官方源 ..."
-        bash <(curl -sSL https://linuxmirrors.cn/main.sh) \
+        bash "$tmp_script" \
             --use-official-source true \
             --protocol https \
             --use-intranet-source false \
@@ -51,6 +59,8 @@ popos_setup_mirror() {
             --install-epel false \
             --pure-mode
     fi
+
+    rm -f "$tmp_script"
 
     return 0
 }

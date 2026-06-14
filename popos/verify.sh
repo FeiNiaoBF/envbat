@@ -8,13 +8,18 @@ popos_verify() {
     echo "========================================"
 
     # --- Directory structure ---
-    echo ">>> /data 目录结构:"
-    local top_dirs
-    top_dirs="$(find /data -maxdepth 1 -type d | wc -l)"
-    local all_dirs
-    all_dirs="$(find /data -type d | wc -l)"
-    echo "  顶层目录: $top_dirs | 总计目录: $all_dirs"
-    echo ""
+    if [ ! -d "/data" ]; then
+        echo "  [SKIP] /data 目录不存在，跳过目录结构验证"
+        echo ""
+    else
+        echo ">>> /data 目录结构:"
+        local top_dirs
+        top_dirs="$(find /data -maxdepth 1 -type d 2>/dev/null | wc -l)"
+        local all_dirs
+        all_dirs="$(find /data -type d 2>/dev/null | wc -l)"
+        echo "  顶层目录: $top_dirs | 总计目录: $all_dirs"
+        echo ""
+    fi
 
     # --- Symlinks ---
     echo ">>> 符号链接:"

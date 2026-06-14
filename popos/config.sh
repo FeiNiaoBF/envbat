@@ -36,5 +36,7 @@ ENVEOF
 
     echo "  [OK] 环境变量已追加到 ~/.bashrc"
     echo "  [HINT] 执行 source ~/.bashrc 或重启终端即可生效"
+    # 自动 source 使当前会话立即生效
+    source "$bashrc" 2>/dev/null && echo "  [OK] 已自动 source ~/.bashrc，环境变量当前会话已生效"
     echo ""
 }

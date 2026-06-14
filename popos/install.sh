@@ -17,15 +17,20 @@ popos_install_tools() {
     )
 
     echo "  更新包索引..."
-    sudo apt-get update -qq 2>/dev/null || { echo "  [WARN] apt update 失败，继续尝试安装"; }
+    if ! sudo apt-get update -qq; then
+        echo "  [WARN] apt update 失败，继续尝试安装"
+    fi
 
     echo "  安装 ${#packages[@]} 个包..."
-    sudo apt-get install -y -qq "${packages[@]}" 2>/dev/null
+    local apt_output
+    apt_output=$(sudo apt-get install -y -qq "${packages[@]}" 2>&1)
+    local apt_rc=$?
 
-    if [ $? -eq 0 ]; then
+    if [ $apt_rc -eq 0 ]; then
         echo "  [OK] 基础工具安装完成"
     else
-        echo "  [WARN] 部分包可能安装失败，请检查 apt 输出"
+        echo "  [WARN] 以下包可能安装失败，错误输出:"
+        echo "$apt_output" | tail -20
     fi
     echo ""
 }

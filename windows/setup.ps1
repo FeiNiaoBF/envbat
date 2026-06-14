@@ -4,6 +4,17 @@
 
 # Main function to coordinate the process
 function Main {
+    # Step 0: Check for Administrator privileges
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) {
+        Write-Warning "当前未以管理员身份运行，部分安装可能失败！"
+        $choice = Read-Host "是否继续？(y/N)"
+        if ($choice -ne "y") {
+            Write-Host "已取消。请以管理员身份重新运行。"
+            exit
+        }
+    }
+
     # Step 1: Check existing installations
     $programmingLanguages = @("C", "C++", "Java", "Golang", "Python")
     $installationStatus = Check-AllInstallations -programmingLanguages $programmingLanguages
