@@ -39,7 +39,7 @@ envbat/
 
 ```bash
 chmod +x popos/setup.sh
-sudo ./popos/setup.sh
+./popos/setup.sh   # 脚本内部自动调用 sudo
 
 # 电源管理（独立工具，不需 root）
 chmod +x popos/popos-power.sh
