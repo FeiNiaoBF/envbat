@@ -93,8 +93,10 @@ function Get-PythonLatestUrl {
 
 # Download the necessary installation packages
 function Download-Packages {
-    param (
-        [string]$installPath
+    param(
+        [string]$installPath,
+        [hashtable]$choices,
+        [switch]$skipExisting
     )
 
     # 设置 TLS 1.2 (部分下载源需要)
@@ -104,36 +106,34 @@ function Download-Packages {
 
     # 检查并创建包存储目录
     if (-not (Test-Path -Path $packageDir)) {
-        Write-Host "The path $packageDir does not exist, creating the path..."
-        New-Item -Path $packageDir -ItemType Directory -Force
-        Write-Host "Successfully created."
+        New-Item -Path $packageDir -ItemType Directory -Force | Out-Null
     }
 
-    # 下载地址（含动态版本获取）
-    $downloadUrls = @{
-        "msys2"  = Get-Msys2LatestUrl
-        "java"   = "https://download.oracle.com/java/21/latest/jdk-21_windows-x64_bin.zip"
-        "go"     = Get-GoLatestUrl
-        "python" = Get-PythonLatestUrl
-    }
+    # 为每个选中的语言获取下载 URL
+    $urls = @{}
+    if ($choices["go"])     { $urls["go"]     = Get-GoLatestUrl }
+    if ($choices["java"])   { $urls["java"]   = "https://download.oracle.com/java/21/latest/jdk-21_windows-x64_bin.zip" }
+    if ($choices["python"]) { $urls["python"] = Get-PythonLatestUrl }
+    if ($choices["msys2"])  { $urls["msys2"]  = Get-Msys2LatestUrl }
 
-    # 遍历哈希表，下载安装包
-    foreach ($language in $downloadUrls.GetEnumerator()) {
-        $fileName = Split-Path -Path $language.Value -Leaf
-        $downloadFilePath = Join-Path -Path $packageDir -ChildPath $fileName
+    $result = @{}
+    foreach ($entry in $urls.GetEnumerator()) {
+        $fileName = Split-Path -Path $entry.Value -Leaf
+        $filePath = Join-Path -Path $packageDir -ChildPath $fileName
 
-        Write-Host "Downloading $fileName..."
-
-        try {
-            Invoke-WebRequest -Uri $language.Value -OutFile $downloadFilePath
-            Write-Host "Downloaded successfully."
-            Write-Host "Download file name: $fileName"
-            Write-Host "Download file path: $downloadFilePath"
+        if ($skipExisting -and (Test-Path $filePath)) {
+            Write-Host "  [CACHE] $fileName (已存在，跳过下载)"
+        } else {
+            Write-Host "  下载 $fileName ..."
+            try {
+                Invoke-WebRequest -Uri $entry.Value -OutFile $filePath -UseBasicParsing
+                Write-Host "  [OK] $fileName"
+            } catch {
+                Write-Warning "  [FAIL] 下载失败: $fileName - $_"
+                continue
+            }
         }
-        catch {
-            Write-Host "Failed to download $fileName. Error: $_"
-        }
+        $result[$entry.Key] = $filePath
     }
-
-    Write-Host "All downloads completed."
+    return $result
 }
