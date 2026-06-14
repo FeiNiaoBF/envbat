@@ -43,6 +43,24 @@ chmod +x popos/popos-power.sh
 ./popos/popos-power.sh
 ```
 
+### Backup & Restore (PopOS)
+
+Backup your configuration, package list, and system settings:
+
+```bash
+# 备份
+./popos/backup.sh
+
+# 恢复最新备份（全部）
+./popos/restore.sh
+
+# 恢复最新备份（逐项确认）
+./popos/restore.sh -i
+
+# 恢复指定备份
+./popos/restore.sh -d 2026-06-14T1530+0800
+```
+
 ## 设计原则
 
 - **模块化** — 每个文件单一职责，入口脚本串联流程
