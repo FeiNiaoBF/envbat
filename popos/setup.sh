@@ -111,7 +111,6 @@ popos_clean_old_bashrc
 title "开始安装"
 
 popos_create_dirs
-popos_create_symlinks
 popos_ensure_symlinks
 popos_cleanup_flatpak
 
