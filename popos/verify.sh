@@ -114,3 +114,51 @@ popos_verify() {
     fi
     echo ""
 }
+
+popos_summary() {
+    echo "========================================"
+    echo " 📋 系统状态摘要"
+    echo "========================================"
+
+    # Disk
+    if [ -d /data ]; then
+        local data_used data_total data_pct
+        data_used=$(df -h /data 2>/dev/null | awk 'NR==2{print $3}')
+        data_total=$(df -h /data 2>/dev/null | awk 'NR==2{print $2}')
+        data_pct=$(df -h /data 2>/dev/null | awk 'NR==2{print $5}')
+        echo "  /data:    ${data_used} / ${data_total} (${data_pct})"
+    fi
+    local root_used root_total root_pct
+    root_used=$(df -h / 2>/dev/null | awk 'NR==2{print $3}')
+    root_total=$(df -h / 2>/dev/null | awk 'NR==2{print $2}')
+    root_pct=$(df -h / 2>/dev/null | awk 'NR==2{print $5}')
+    echo "  系统盘:   ${root_used} / ${root_total} (${root_pct})"
+
+    # Memory
+    local mem_total mem_used
+    mem_total=$(free -h 2>/dev/null | awk 'NR==2{print $2}')
+    mem_used=$(free -h 2>/dev/null | awk 'NR==2{print $3}')
+    echo "  内存:     ${mem_used} / ${mem_total}"
+
+    # Uptime
+    local uptime_str
+    uptime_str=$(uptime -p 2>/dev/null | sed 's/up //')
+    echo "  运行时间: ${uptime_str}"
+
+    # Shell
+    echo "  默认 Shell: $SHELL"
+
+    # Profile
+    if [ -f "$HOME/.config/envbat/profile.sh" ]; then
+        echo "  配置文件: ✅ 已保存"
+    fi
+
+    # Symlink check
+    local sym_ok=0 sym_total=0
+    for name in Code Projects Data Tools; do
+        [ -L "$HOME/$name" ] && ((sym_ok++))
+        ((sym_total++))
+    done
+    echo "  符号链接: ${sym_ok}/${sym_total} 有效"
+    echo ""
+}

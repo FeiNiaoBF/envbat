@@ -138,6 +138,7 @@ popos_config_shell_chain
 # Verify + Summary
 # ============================================================
 popos_verify
+popos_summary
 
 echo "========================================"
 echo " ✅ PopOS 环境配置完成！"
