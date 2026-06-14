@@ -1,6 +1,6 @@
 # Import the required scripts
-. "$PSScriptRoot\01-check.ps1"
-. "$PSScriptRoot\02-download.ps1"
+. "$PSScriptRoot\check.ps1"
+. "$PSScriptRoot\download.ps1"
 
 # Main function to coordinate the process
 function Main {

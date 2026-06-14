@@ -8,9 +8,9 @@
 envbat/
 ├── README.md
 ├── windows/              # Windows 环境配置
-│   ├── setup.ps1         # ── 入口：依次执行 01→02
-│   ├── 01-check.ps1      # 检测已安装的编程语言环境
-│   └── 02-download.ps1   # 下载选取的编程语言安装包
+│   ├── setup.ps1         # ── 入口：依次执行 check→download
+│   ├── check.ps1      # 检测已安装的编程语言环境
+│   └── download.ps1   # 下载选取的编程语言安装包
 └── popos/                # Pop!_OS 环境配置
     ├── setup.sh           # ── 入口：依次执行 check→verify（mirror/utils 仅 source）
     ├── check.sh           # 检测系统环境
