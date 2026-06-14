@@ -2,12 +2,19 @@
 # === PopOS 开发环境 — 交互式一键配置 ===
 # 使用方式:
 #   chmod +x popos/setup.sh
-#   sudo ./popos/setup.sh
+#   ./popos/setup.sh          (脚本内部需要在必要时自动调用 sudo)
 #
 # 首次运行：一问一答引导式，保存配置后自动安装。
 # 再次运行：检测到已有配置自动跳过问答，按上次选择执行。
 # ============================================================
 set -euo pipefail
+
+# Check: do NOT run as root — script calls sudo internally when needed
+if [ "$(id -u)" -eq 0 ]; then
+    echo "错误: 不要使用 sudo 运行此脚本。脚本内部会在需要时自动调用 sudo。"
+    echo "正确用法: ./popos/setup.sh"
+    exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

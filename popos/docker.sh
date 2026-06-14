@@ -13,8 +13,12 @@ popos_install_docker() {
     sudo install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
         sudo tee /etc/apt/keyrings/docker.asc >/dev/null
-    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] \
-https://download.docker.com/linux/ubuntu noble stable" | \
+    local distro_codename
+    distro_codename=$(lsb_release -cs 2>/dev/null || echo "noble")
+    local arch
+    arch=$(dpkg --print-architecture 2>/dev/null || echo "amd64")
+    echo "deb [arch=${arch} signed-by=/etc/apt/keyrings/docker.asc] \
+https://download.docker.com/linux/ubuntu ${distro_codename} stable" | \
         sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
     sudo apt-get update -qq 2>/dev/null
     sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io \

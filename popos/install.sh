@@ -34,4 +34,9 @@ popos_install_tools() {
         echo "$apt_output" | tail -20
     fi
     echo ""
+    # fd-find → fd alias (PopOS package installs as fdfind)
+    if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
+        sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd 2>/dev/null && \
+            echo "  [OK] fd 别名已创建 (fdfind → fd)"
+    fi
 }

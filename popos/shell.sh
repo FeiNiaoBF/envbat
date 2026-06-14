@@ -28,13 +28,6 @@ popos_install_ohmyzsh() {
     if [ ! -d "$custom_dir/zsh-syntax-highlighting" ]; then
         git clone --depth 1 https://github.com/zsh-users/zsh-syntax-highlighting "$custom_dir/zsh-syntax-highlighting" 2>/dev/null
     fi
-    # fzf (via apt, ensure zsh integration)
-    if command -v fzf &>/dev/null; then
-        local fzf_zsh="/usr/share/doc/fzf/examples/key-bindings.zsh"
-        if [ -f "$fzf_zsh" ]; then
-            echo "source $fzf_zsh" >> "$PROFILE_FILE"
-        fi
-    fi
     ok "Zsh 插件已安装"
     # Update .zshrc theme and plugins
     local zshrc="$HOME/.zshrc"
