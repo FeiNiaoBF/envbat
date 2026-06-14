@@ -47,6 +47,21 @@ popos_save_profile() {
 # Delete this file to re-run interactive setup.
 
 INSTALL_BASE="${INSTALL_BASE:-/data}"
+
+# Derived environment variables
+export DATA_HOME="${INSTALL_BASE}"
+export CODE_HOME="${INSTALL_BASE}/workspace/github"
+export TOOLS_HOME="${INSTALL_BASE}/tools"
+export HF_HOME="${INSTALL_BASE}/models/huggingface"
+export CARGO_HOME="${INSTALL_BASE}/tools/cargo"
+export XDG_DATA_HOME="${INSTALL_BASE}/temp/xdg-data"
+export XDG_CACHE_HOME="${INSTALL_BASE}/temp/xdg-cache"
+export TMPDIR="${INSTALL_BASE}/temp"
+# Extend PATH with tools/bin
+if [ -d "${TOOLS_HOME}/bin" ]; then
+    export PATH="${TOOLS_HOME}/bin:${PATH}"
+fi
+
 INSTALL_GO="${INSTALL_GO:-true}"
 INSTALL_NVM_NODE="${INSTALL_NVM_NODE:-true}"
 INSTALL_PYENV="${INSTALL_PYENV:-true}"
