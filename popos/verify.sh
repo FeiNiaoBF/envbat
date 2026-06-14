@@ -148,6 +148,10 @@ popos_summary() {
     # Shell
     echo "  默认 Shell: $SHELL"
 
+    # Security
+    echo "  防火墙: $(sudo ufw status 2>/dev/null | head -1 || echo '未安装')"
+    echo "  Fail2ban: $(systemctl is-active fail2ban 2>/dev/null || echo '未安装')"
+
     # Profile
     if [ -f "$HOME/.config/envbat/profile.sh" ]; then
         echo "  配置文件: ✅ 已保存"

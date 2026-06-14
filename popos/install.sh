@@ -40,3 +40,20 @@ popos_install_tools() {
             echo "  [OK] fd 别名已创建 (fdfind → fd)"
     fi
 }
+
+popos_install_chrome() {
+    echo ">>> 安装 Google Chrome <<<"
+    if command -v google-chrome &>/dev/null || command -v google-chrome-stable &>/dev/null; then
+        echo "  [SKIP] Google Chrome 已安装"
+        return
+    fi
+    # Add Google Chrome repo
+    curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | \
+        sudo tee /etc/apt/keyrings/google.asc >/dev/null
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google.asc] https://dl.google.com/linux/chrome/deb/ stable main" | \
+        sudo tee /etc/apt/sources.list.d/google-chrome.list >/dev/null
+    sudo apt-get update -qq 2>/dev/null
+    sudo apt-get install -y -qq google-chrome-stable 2>/dev/null
+    ok "Google Chrome 已安装"
+    echo ""
+}

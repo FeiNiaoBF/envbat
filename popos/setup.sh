@@ -33,6 +33,8 @@ source "$SCRIPT_DIR/config.sh"
 source "$SCRIPT_DIR/verify.sh"
 source "$SCRIPT_DIR/mirror.sh"
 source "$SCRIPT_DIR/utils.sh"
+source "$SCRIPT_DIR/security.sh"
+source "$SCRIPT_DIR/locale.sh"
 
 # ============================================================
 # Interactive Questions
@@ -79,6 +81,20 @@ popos_ask_questions() {
     if [ "$INSTALL_GO" = true ]; then
         GO_VERSION=$(curl -sL 'https://go.dev/dl/?mode=json' | grep -oP '"version": "\K[^"]+' | head -1 2>/dev/null || echo "")
     fi
+
+    title "安全设置"
+    ask_yes_no "开启 UFW 防火墙?" "Y" && INSTALL_UFW=true || INSTALL_UFW=false
+    ask_yes_no "安装 Fail2ban (防SSH暴力破解)?" "Y" && INSTALL_FAIL2BAN=true || INSTALL_FAIL2BAN=false
+    ask_yes_no "开启自动安全更新?" "Y" && INSTALL_AUTO_UPDATES=true || INSTALL_AUTO_UPDATES=false
+    echo ""
+
+    title "中文环境"
+    ask_yes_no "配置中文 locale + fcitx5 输入法?" "Y" && INSTALL_CHINESE=true || INSTALL_CHINESE=false
+    echo ""
+
+    title "浏览器"
+    ask_yes_no "安装 Google Chrome?" "Y" && INSTALL_CHROME=true || INSTALL_CHROME=false
+    echo ""
 }
 
 # ============================================================
@@ -124,6 +140,13 @@ popos_cleanup_flatpak
 popos_install_tools
 
 popos_install_languages
+
+popos_install_security
+popos_setup_locale
+
+if [ "$INSTALL_CHROME" = true ]; then
+    popos_install_chrome
+fi
 
 if [ "$INSTALL_NEOVIM" = true ]; then
     popos_install_neovim
