@@ -160,5 +160,16 @@ popos_summary() {
         ((sym_total++))
     done
     echo "  符号链接: ${sym_ok}/${sym_total} 有效"
+
+    # Env vars (from profile)
+    echo ""
+    echo "--- 环境变量 ---"
+    for var in DATA_HOME CODE_HOME TOOLS_HOME HF_HOME CARGO_HOME TMPDIR; do
+        if [ -n "${!var:-}" ]; then
+            echo "  [OK]  $var=${!var}"
+        else
+            echo "  [MISS] $var"
+        fi
+    done
     echo ""
 }
