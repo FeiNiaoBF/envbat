@@ -24,7 +24,7 @@ popos_verify() {
     # --- Symlinks ---
     echo ">>> 符号链接:"
     local symlinks_ok=0 symlinks_miss=0
-    for name in Code Projects Experiments Data Datasets Models Tools Library Shared Backups; do
+    for name in Code Projects Data Tools Experiments Datasets Models Library Shared Backups; do
         local path="$HOME/$name"
         if [ -L "$path" ]; then
             local target
@@ -37,6 +37,15 @@ popos_verify() {
         fi
     done
     echo "  $symlinks_ok OK, $symlinks_miss missing"
+    echo ""
+
+    # --- Profile ---
+    echo ">>> 配置文件:"
+    if [ -f "$HOME/.config/envbat/profile.sh" ]; then
+        echo "  [OK]  配置文件存在: ~/.config/envbat/profile.sh"
+    else
+        echo "  [MISS] 配置文件不存在"
+    fi
     echo ""
 
     # --- Env vars ---
@@ -52,7 +61,7 @@ popos_verify() {
 
     # --- Installed tools ---
     echo ">>> 基础工具:"
-    local tools_tools=(git curl wget gcc make htop neofetch tree rg fdfind unzip tar)
+    local tools_tools=(git curl wget gcc make htop neofetch tree rg fdfind unzip tar fzf zoxide)
     local tools_ok=0 tools_miss=0
     for cmd in "${tools_tools[@]}"; do
         if command -v "$cmd" &>/dev/null; then
@@ -64,5 +73,44 @@ popos_verify() {
         fi
     done
     echo "  $tools_ok OK, $tools_miss missing"
+    echo ""
+
+    # --- Development tools (chosen during setup) ---
+    echo ">>> 开发工具:"
+    local lang_tools=()
+    if [ "${INSTALL_GO:-false}" = true ]; then
+        lang_tools+=(go)
+    fi
+    if [ "${INSTALL_NVM_NODE:-false}" = true ]; then
+        lang_tools+=(node npm)
+    fi
+    if [ "${INSTALL_RUSTUP:-false}" = true ]; then
+        lang_tools+=(rustc cargo)
+    fi
+    if [ "${INSTALL_NEOVIM:-false}" = true ]; then
+        lang_tools+=(nvim)
+    fi
+    if [ "${INSTALL_DOCKER:-false}" = true ]; then
+        lang_tools+=(docker)
+    fi
+    if [ "${INSTALL_JAVA:-skip}" != "skip" ]; then
+        lang_tools+=(java javac)
+    fi
+
+    if [ ${#lang_tools[@]} -eq 0 ]; then
+        echo "  (未选择开发工具)"
+    else
+        local dev_ok=0 dev_miss=0
+        for cmd in "${lang_tools[@]}"; do
+            if command -v "$cmd" &>/dev/null || [ -x "$HOME/Tools/bin/$cmd" ]; then
+                echo "  [OK]  $cmd"
+                ((dev_ok++))
+            else
+                echo "  [MISS] $cmd"
+                ((dev_miss++))
+            fi
+        done
+        echo "  $dev_ok OK, $dev_miss missing"
+    fi
     echo ""
 }

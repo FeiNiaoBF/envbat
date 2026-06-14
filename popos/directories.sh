@@ -66,43 +66,44 @@ popos_create_dirs() {
     echo ""
 }
 
-popos_create_symlinks() {
-    echo ">>> 符号链接 <<<"
-
-    # Map: symlink_name:target_path
+popos_ensure_symlinks() {
+    echo ">>> 确保符号链接 <<<"
     local links=(
-        "Code:$DATA_HOME/workspace/github"
-        "Projects:$DATA_HOME/workspace/local"
-        "Experiments:$DATA_HOME/workspace/experiments"
-        "Data:$DATA_HOME"
-        "Datasets:$DATA_HOME/datasets"
-        "Models:$DATA_HOME/models"
-        "Tools:$DATA_HOME/tools"
-        "Library:$DATA_HOME/library"
-        "Shared:$DATA_HOME/shared"
-        "Backups:$DATA_HOME/backups"
+        "Code:$INSTALL_BASE/workspace/github"
+        "Projects:$INSTALL_BASE/workspace/local"
+        "Data:$INSTALL_BASE"
+        "Tools:$INSTALL_BASE/tools"
     )
-
     for entry in "${links[@]}"; do
         local name="${entry%%:*}"
         local target="${entry#*:}"
         local link_path="$HOME/$name"
-
-        if [ -L "$link_path" ]; then
-            local current
-            current="$(readlink "$link_path")"
-            if [ "$current" = "$target" ]; then
-                echo "  [OK]  ~/$name → $target"
-            else
-                ln -sfn "$target" "$link_path"
-                echo "  [FIX] ~/$name → $target (原指向 $current)"
-            fi
-        elif [ -e "$link_path" ]; then
-            echo "  [SKIP] ~/$name 是真实文件/目录，跳过"
+        if [ -L "$link_path" ] && [ "$(readlink "$link_path")" = "$target" ]; then
+            echo "  [OK]  ~/$name → $target"
+        elif [ -L "$link_path" ]; then
+            ln -sfn "$target" "$link_path" && echo "  [FIX] ~/$name → $target"
+        elif [ ! -e "$link_path" ]; then
+            ln -s "$target" "$link_path" && echo "  [LINK] ~/$name → $target"
         else
-            ln -s "$target" "$link_path"
-            echo "  [LINK] ~/$name → $target"
+            echo "  [SKIP] ~/$name 是真实文件，跳过"
         fi
     done
+    echo ""
+}
+
+popos_cleanup_flatpak() {
+    echo ">>> 清理 Flatpak 缓存 <<<"
+    if command -v flatpak &>/dev/null; then
+        local unused
+        unused=$(flatpak uninstall --unused 2>&1)
+        if echo "$unused" | grep -q "Nothing unused to uninstall"; then
+            echo "  [OK]  没有可清理的 flatpak"
+        else
+            echo "$unused"
+            echo "  [OK]  Flatpak 已清理"
+        fi
+    else
+        echo "  [SKIP] flatpak 未安装"
+    fi
     echo ""
 }
