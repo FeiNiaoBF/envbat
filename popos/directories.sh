@@ -48,7 +48,12 @@ popos_create_dirs() {
     local count=0
     for d in "${dirs[@]}"; do
         if [ ! -d "$d" ]; then
-            sudo mkdir -p "$d" && { echo "  [CREATE] $d"; ((count++)); } || echo "  [FAIL]   $d"
+            if sudo mkdir -p "$d"; then
+                echo "  [CREATE] $d"
+                count=$((count + 1))
+            else
+                echo "  [FAIL]   $d"
+            fi
         else
             echo "  [EXISTS] $d"
         fi
@@ -95,12 +100,18 @@ popos_cleanup_flatpak() {
     echo ">>> 清理 Flatpak 缓存 <<<"
     if command -v flatpak &>/dev/null; then
         local unused
-        unused=$(flatpak uninstall --unused 2>&1)
-        if echo "$unused" | grep -q "Nothing unused to uninstall"; then
-            echo "  [OK]  没有可清理的 flatpak"
+        if unused=$(flatpak uninstall --unused -y 2>&1); then
+            if echo "$unused" | grep -qi "Nothing unused to uninstall"; then
+                echo "  [OK]  没有可清理的 flatpak"
+            elif [ -n "$unused" ]; then
+                echo "$unused"
+                echo "  [OK]  Flatpak 已清理"
+            else
+                echo "  [OK]  Flatpak 已清理"
+            fi
         else
             echo "$unused"
-            echo "  [OK]  Flatpak 已清理"
+            echo "  [WARN] Flatpak 清理失败，继续安装"
         fi
     else
         echo "  [SKIP] flatpak 未安装"

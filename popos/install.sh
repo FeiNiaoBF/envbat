@@ -13,7 +13,7 @@ popos_install_tools() {
         htop neofetch tree
         unzip tar gzip bzip2 xz-utils
         ripgrep fd-find
-        fzf zoxide
+        fzf zoxide zsh
         software-properties-common apt-transport-https
     )
 
