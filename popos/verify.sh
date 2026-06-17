@@ -113,6 +113,55 @@ popos_verify() {
         echo "  $dev_ok OK, $dev_miss missing"
     fi
     echo ""
+
+    # --- Shell setup ---
+    if [ "${INSTALL_OHMYZSH:-false}" = true ]; then
+        echo ">>> Zsh / oh-my-zsh:"
+        local login_shell
+        login_shell="$(getent passwd "$USER" 2>/dev/null | cut -d: -f7 || true)"
+        if command -v zsh &>/dev/null; then
+            echo "  [OK]  zsh"
+        else
+            echo "  [MISS] zsh"
+        fi
+        if [ -d "$HOME/.oh-my-zsh" ]; then
+            echo "  [OK]  ~/.oh-my-zsh"
+        else
+            echo "  [MISS] ~/.oh-my-zsh"
+        fi
+        if [ "${login_shell##*/}" = "zsh" ]; then
+            echo "  [OK]  默认 shell: $login_shell"
+        else
+            echo "  [MISS] 默认 shell 不是 zsh: ${login_shell:-unknown}"
+        fi
+        echo ""
+    fi
+
+    # --- Chinese input method ---
+    if [ "${INSTALL_CHINESE:-false}" = true ]; then
+        echo ">>> 中文输入法:"
+        if locale -a 2>/dev/null | grep -qi '^zh_CN\.utf8$'; then
+            echo "  [OK]  zh_CN.UTF-8 locale"
+        else
+            echo "  [MISS] zh_CN.UTF-8 locale"
+        fi
+        if command -v fcitx5 &>/dev/null; then
+            echo "  [OK]  fcitx5"
+        else
+            echo "  [MISS] fcitx5"
+        fi
+        if [ -f "$HOME/.xinputrc" ] && grep -q fcitx5 "$HOME/.xinputrc" 2>/dev/null; then
+            echo "  [OK]  im-config: fcitx5"
+        else
+            echo "  [MISS] im-config 未设置为 fcitx5"
+        fi
+        if [ -f "$HOME/.config/autostart/org.fcitx.Fcitx5.desktop" ] || [ -f "$HOME/.config/autostart/fcitx5.desktop" ]; then
+            echo "  [OK]  fcitx5 自启动"
+        else
+            echo "  [MISS] fcitx5 自启动"
+        fi
+        echo ""
+    fi
 }
 
 popos_summary() {

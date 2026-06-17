@@ -33,13 +33,33 @@ popos_load_profile() {
     if [ -f "$PROFILE_FILE" ]; then
         # shellcheck source=/dev/null
         source "$PROFILE_FILE"
+        popos_profile_defaults
         ok "已加载配置: $PROFILE_FILE"
         return 0
     fi
     return 1
 }
 
+popos_profile_defaults() {
+    INSTALL_GO="${INSTALL_GO:-true}"
+    INSTALL_NVM_NODE="${INSTALL_NVM_NODE:-true}"
+    INSTALL_PYENV="${INSTALL_PYENV:-true}"
+    INSTALL_RUSTUP="${INSTALL_RUSTUP:-true}"
+    INSTALL_JAVA="${INSTALL_JAVA:-21}"
+    INSTALL_NEOVIM="${INSTALL_NEOVIM:-true}"
+    INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
+    INSTALL_OHMYZSH="${INSTALL_OHMYZSH:-true}"
+    INSTALL_SSH="${INSTALL_SSH:-generate}"
+    INSTALL_EXTRA_TOOLS="${INSTALL_EXTRA_TOOLS:-true}"
+    INSTALL_UFW="${INSTALL_UFW:-true}"
+    INSTALL_FAIL2BAN="${INSTALL_FAIL2BAN:-true}"
+    INSTALL_AUTO_UPDATES="${INSTALL_AUTO_UPDATES:-true}"
+    INSTALL_CHINESE="${INSTALL_CHINESE:-true}"
+    INSTALL_CHROME="${INSTALL_CHROME:-true}"
+}
+
 popos_save_profile() {
+    popos_profile_defaults
     mkdir -p "$PROFILE_DIR"
     cat > "$PROFILE_FILE" << PROFILEEOF
 # === envbat profile ===
