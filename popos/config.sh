@@ -5,11 +5,10 @@
 
 popos_config_shell_chain() {
     echo ">>> 配置 Shell 加载链 <<<"
-    local profile_guard="# === envbat profile ==="
     local source_line='[ -f "$HOME/.config/envbat/profile.sh" ] && source "$HOME/.config/envbat/profile.sh"'
     # Add to .bashrc
     local bashrc="$HOME/.bashrc"
-    if ! grep -qF "$profile_guard" "$bashrc" 2>/dev/null; then
+    if ! grep -qF ".config/envbat/profile.sh" "$bashrc" 2>/dev/null; then
         cat >> "$bashrc" << 'EOF'
 
 # envbat — load persisted profile
@@ -25,7 +24,7 @@ EOF
         # Pre-create .zshrc for oh-my-zsh
         touch "$zshrc"
     fi
-    if ! grep -qF "$profile_guard" "$zshrc" 2>/dev/null; then
+    if ! grep -qF ".config/envbat/profile.sh" "$zshrc" 2>/dev/null; then
         cat >> "$zshrc" << 'EOF'
 
 # envbat — load persisted profile

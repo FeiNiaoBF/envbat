@@ -18,27 +18,41 @@ popos_install_ohmyzsh() {
     if [ -d "$HOME/.oh-my-zsh" ]; then
         echo "  [SKIP] oh-my-zsh 已安装"
     else
-        sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-        ok "oh-my-zsh 已安装"
+        if git clone --depth 1 https://github.com/ohmyzsh/ohmyzsh.git "$HOME/.oh-my-zsh"; then
+            ok "oh-my-zsh 已安装"
+        else
+            fail "oh-my-zsh 下载失败，请检查 GitHub 网络连通"
+            return 1
+        fi
     fi
     echo ">>> 安装 Powerlevel10k <<<"
     local p10k_dir="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k"
     if [ -d "$p10k_dir" ]; then
         echo "  [SKIP] Powerlevel10k 已安装"
     else
-        git clone --depth 1 https://github.com/romkatv/powerlevel10k.git "$p10k_dir"
-        ok "Powerlevel10k 已安装"
+        if git clone --depth 1 https://github.com/romkatv/powerlevel10k.git "$p10k_dir"; then
+            ok "Powerlevel10k 已安装"
+        else
+            fail "Powerlevel10k 下载失败，请检查 GitHub 网络连通"
+            return 1
+        fi
     fi
     echo ">>> 安装 Zsh 插件 <<<"
     local custom_dir="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins"
     mkdir -p "$custom_dir"
     # zsh-autosuggestions
     if [ ! -d "$custom_dir/zsh-autosuggestions" ]; then
-        git clone --depth 1 https://github.com/zsh-users/zsh-autosuggestions "$custom_dir/zsh-autosuggestions"
+        if ! git clone --depth 1 https://github.com/zsh-users/zsh-autosuggestions "$custom_dir/zsh-autosuggestions"; then
+            fail "zsh-autosuggestions 下载失败，请检查 GitHub 网络连通"
+            return 1
+        fi
     fi
     # zsh-syntax-highlighting
     if [ ! -d "$custom_dir/zsh-syntax-highlighting" ]; then
-        git clone --depth 1 https://github.com/zsh-users/zsh-syntax-highlighting "$custom_dir/zsh-syntax-highlighting"
+        if ! git clone --depth 1 https://github.com/zsh-users/zsh-syntax-highlighting "$custom_dir/zsh-syntax-highlighting"; then
+            fail "zsh-syntax-highlighting 下载失败，请检查 GitHub 网络连通"
+            return 1
+        fi
     fi
     ok "Zsh 插件已安装"
     # Update .zshrc theme and plugins

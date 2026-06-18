@@ -2,9 +2,10 @@
 # === PopOS: Directory Structure + Symlinks ===
 # Source this from setup-popos.sh only.
 
-DATA_HOME="/data"
+DATA_HOME="${INSTALL_BASE:-/data}"
 
 popos_create_dirs() {
+    DATA_HOME="${INSTALL_BASE:-/data}"
     echo "========================================"
     echo " [2/5] 创建目录结构"
     echo "========================================"

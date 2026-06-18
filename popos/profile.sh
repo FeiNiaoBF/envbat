@@ -122,7 +122,7 @@ PROFILEEOF
     # Auto-source in .bashrc
     local guard="# === envbat ==="
     local source_line='if [ -f "$HOME/.config/envbat/profile.sh" ]; then source "$HOME/.config/envbat/profile.sh"; fi'
-    if ! grep -qF "$guard" "$HOME/.bashrc" 2>/dev/null; then
+    if ! grep -qF ".config/envbat/profile.sh" "$HOME/.bashrc" 2>/dev/null; then
         {
             echo ""
             echo "$guard"
@@ -131,7 +131,7 @@ PROFILEEOF
         ok ".bashrc 已添加 envbat 加载"
     fi
     # Auto-source in .zshrc (if exists or will exist after oh-my-zsh install)
-    if [ ! -f "$HOME/.zshrc" ] || ! grep -qF "$guard" "$HOME/.zshrc" 2>/dev/null; then
+    if [ ! -f "$HOME/.zshrc" ] || ! grep -qF ".config/envbat/profile.sh" "$HOME/.zshrc" 2>/dev/null; then
         {
             echo ""
             echo "$guard"

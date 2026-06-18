@@ -30,10 +30,10 @@ popos_verify() {
             local target
             target="$(readlink "$path")"
             echo "  [OK]  ~/$name → $target"
-            ((symlinks_ok++))
+            symlinks_ok=$((symlinks_ok + 1))
         else
             echo "  [MISS] ~/$name"
-            ((symlinks_miss++))
+            symlinks_miss=$((symlinks_miss + 1))
         fi
     done
     echo "  $symlinks_ok OK, $symlinks_miss missing"
@@ -60,19 +60,34 @@ popos_verify() {
     echo ""
 
     # --- Installed tools ---
-    echo ">>> 基础工具:"
-    local tools_tools=(git curl wget gcc make htop neofetch tree rg fdfind unzip tar fzf zoxide)
+    echo ">>> 必需基础工具:"
+    local required_tools=(git curl wget gcc make unzip tar zsh)
     local tools_ok=0 tools_miss=0
-    for cmd in "${tools_tools[@]}"; do
+    for cmd in "${required_tools[@]}"; do
         if command -v "$cmd" &>/dev/null; then
             echo "  [OK]  $cmd"
-            ((tools_ok++))
+            tools_ok=$((tools_ok + 1))
         else
             echo "  [MISS] $cmd"
-            ((tools_miss++))
+            tools_miss=$((tools_miss + 1))
         fi
     done
     echo "  $tools_ok OK, $tools_miss missing"
+    echo ""
+
+    echo ">>> 可选基础工具:"
+    local optional_tools=(htop neofetch tree rg fdfind fzf zoxide)
+    local opt_ok=0 opt_miss=0
+    for cmd in "${optional_tools[@]}"; do
+        if command -v "$cmd" &>/dev/null; then
+            echo "  [OK]  $cmd"
+            opt_ok=$((opt_ok + 1))
+        else
+            echo "  [MISS] $cmd"
+            opt_miss=$((opt_miss + 1))
+        fi
+    done
+    echo "  $opt_ok OK, $opt_miss missing"
     echo ""
 
     # --- Development tools (chosen during setup) ---
@@ -104,10 +119,10 @@ popos_verify() {
         for cmd in "${lang_tools[@]}"; do
             if command -v "$cmd" &>/dev/null || [ -x "$HOME/Tools/bin/$cmd" ]; then
                 echo "  [OK]  $cmd"
-                ((dev_ok++))
+                dev_ok=$((dev_ok + 1))
             else
                 echo "  [MISS] $cmd"
-                ((dev_miss++))
+                dev_miss=$((dev_miss + 1))
             fi
         done
         echo "  $dev_ok OK, $dev_miss missing"
@@ -162,6 +177,10 @@ popos_verify() {
         fi
         echo ""
     fi
+
+    if [ "${tools_miss:-0}" -gt 0 ]; then
+        return 1
+    fi
 }
 
 popos_summary() {
@@ -209,8 +228,8 @@ popos_summary() {
     # Symlink check
     local sym_ok=0 sym_total=0
     for name in Code Projects Data Tools; do
-        [ -L "$HOME/$name" ] && ((sym_ok++))
-        ((sym_total++))
+        [ -L "$HOME/$name" ] && sym_ok=$((sym_ok + 1))
+        sym_total=$((sym_total + 1))
     done
     echo "  符号链接: ${sym_ok}/${sym_total} 有效"
 

@@ -2,14 +2,28 @@
 # === PopOS 开发环境 — 交互式一键配置 ===
 # 使用方式:
 #   chmod +x popos/setup.sh
-#   ./popos/setup.sh          (脚本内部需要在必要时自动调用 sudo)
-#
-# 首次运行：一问一答引导式，保存配置后自动安装。
-# 再次运行：检测到已有配置自动跳过问答，按上次选择执行。
+#   ./popos/setup.sh
+#   ./popos/setup.sh --repair   # 复用已保存 profile，非交互补装/修复
 # ============================================================
 set -euo pipefail
 
-# Check: do NOT run as root — script calls sudo internally when needed
+REPAIR_MODE=false
+
+show_help() {
+    echo "用法: $0 [--repair] [--help]"
+    echo ""
+    echo "  --repair   复用 ~/.config/envbat/profile.sh，跳过问答并执行阶段化修复"
+    echo "  --help     显示帮助"
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --repair) REPAIR_MODE=true; shift ;;
+        --help|-h) show_help; exit 0 ;;
+        *) echo "未知参数: $1"; show_help; exit 1 ;;
+    esac
+done
+
 if [ "$(id -u)" -eq 0 ]; then
     echo "错误: 不要使用 sudo 运行此脚本。脚本内部会在需要时自动调用 sudo。"
     echo "正确用法: ./popos/setup.sh"
@@ -18,7 +32,7 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Load all modules
+source "$SCRIPT_DIR/runner.sh"
 source "$SCRIPT_DIR/interactive.sh"
 source "$SCRIPT_DIR/check.sh"
 source "$SCRIPT_DIR/directories.sh"
@@ -36,9 +50,13 @@ source "$SCRIPT_DIR/utils.sh"
 source "$SCRIPT_DIR/security.sh"
 source "$SCRIPT_DIR/locale.sh"
 
-# ============================================================
-# Interactive Questions
-# ============================================================
+run_required() {
+    if ! stage_required "$@"; then
+        stage_summary
+        exit 1
+    fi
+}
+
 popos_ask_questions() {
     title "安装基础路径"
     if [ -d "/data" ]; then
@@ -77,7 +95,6 @@ popos_ask_questions() {
     ask_yes_no "安装额外工具 (ripgrep, fd-find, fzf, zoxide)?" "Y" && INSTALL_EXTRA_TOOLS=true || INSTALL_EXTRA_TOOLS=false
     echo ""
 
-    # Detect Go latest version for profile
     if [ "$INSTALL_GO" = true ]; then
         GO_VERSION=$(curl -sL 'https://go.dev/dl/?mode=json' | grep -oP '"version": "\K[^"]+' | head -1 2>/dev/null || echo "")
     fi
@@ -97,81 +114,96 @@ popos_ask_questions() {
     echo ""
 }
 
-# ============================================================
-# Main
-# ============================================================
-echo ""
-echo "################################################"
-echo "#  PopOS 开发环境 - 交互式一键配置              #"
-echo "#  Phase 1: 语言运行时 + 工具 + 桌面配置        #"
-echo "################################################"
-echo ""
+popos_prepare_profile() {
+    local profile_exists=false
+    popos_load_profile && profile_exists=true || profile_exists=false
 
-# ---- Pre-check ----
-popos_check_system
-
-# ---- Profile (interactive or load) ----
-popos_load_profile && PROFILE_EXISTS=true || PROFILE_EXISTS=false
-
-if [ "$PROFILE_EXISTS" = true ]; then
-    if ! ask_yes_no "检测到已有配置，是否重新配置?" "N"; then
-        echo "  使用现有配置继续安装"
+    if [ "$REPAIR_MODE" = true ]; then
+        if [ "$profile_exists" != true ]; then
+            fail "repair 模式需要先存在 ~/.config/envbat/profile.sh"
+            return 1
+        fi
+        echo "  使用现有配置执行 repair"
+    elif [ "$profile_exists" = true ]; then
+        if ask_yes_no "检测到已有配置，是否重新配置?" "N"; then
+            popos_ask_questions
+            popos_save_profile
+        else
+            echo "  使用现有配置继续安装"
+        fi
     else
         popos_ask_questions
         popos_save_profile
     fi
+
+    popos_clean_old_bashrc
+}
+
+popos_setup_directories() {
+    popos_create_dirs
+    popos_ensure_symlinks
+}
+
+echo ""
+echo "################################################"
+echo "#  PopOS 环境配置 - 阶段化容错安装              #"
+echo "################################################"
+echo ""
+
+run_required "precheck" popos_check_system
+run_required "profile" popos_prepare_profile
+run_required "directories" popos_setup_directories
+
+stage_optional "flatpak cleanup" popos_cleanup_flatpak
+
+run_required "base tools" popos_install_tools
+
+if [ "${INSTALL_OHMYZSH:-false}" = true ]; then
+    stage_optional "oh-my-zsh + Powerlevel10k" popos_install_ohmyzsh
 else
-    popos_ask_questions
-    popos_save_profile
+    stage_skip "oh-my-zsh + Powerlevel10k" "user disabled"
 fi
 
-# Clean old env vars from .bashrc
-popos_clean_old_bashrc
+[ "${INSTALL_GO:-false}" = true ] && stage_optional "go" popos_install_go || stage_skip "go" "user disabled"
+[ "${INSTALL_NVM_NODE:-false}" = true ] && stage_optional "node nvm" popos_install_nvm_node || stage_skip "node nvm" "user disabled"
+[ "${INSTALL_PYENV:-false}" = true ] && stage_optional "pyenv" popos_install_pyenv || stage_skip "pyenv" "user disabled"
+[ "${INSTALL_RUSTUP:-false}" = true ] && stage_optional "rustup" popos_install_rustup || stage_skip "rustup" "user disabled"
+[ "${INSTALL_JAVA:-skip}" != "skip" ] && stage_optional "java" popos_install_java || stage_skip "java" "user disabled"
 
-# ============================================================
-# Execute
-# ============================================================
-title "开始安装"
-
-popos_create_dirs
-popos_ensure_symlinks
-popos_cleanup_flatpak
-
-popos_install_tools
-
-popos_install_languages
-
-popos_install_security
-popos_setup_locale
-
-if [ "$INSTALL_CHROME" = true ]; then
-    popos_install_chrome
+if [ "${INSTALL_UFW:-false}" = true ] || [ "${INSTALL_FAIL2BAN:-false}" = true ] || [ "${INSTALL_AUTO_UPDATES:-false}" = true ]; then
+    stage_optional "security" popos_install_security
+else
+    stage_skip "security" "user disabled"
 fi
 
-if [ "$INSTALL_NEOVIM" = true ]; then
-    popos_install_neovim
-    popos_install_nerd_font
+[ "${INSTALL_CHINESE:-false}" = true ] && stage_optional "locale input method" popos_setup_locale || stage_skip "locale input method" "user disabled"
+[ "${INSTALL_CHROME:-false}" = true ] && stage_optional "chrome" popos_install_chrome || stage_skip "chrome" "user disabled"
+
+if [ "${INSTALL_NEOVIM:-false}" = true ]; then
+    stage_optional "neovim" popos_install_neovim
+    stage_optional "nerd font" popos_install_nerd_font
+else
+    stage_skip "neovim" "user disabled"
+    stage_skip "nerd font" "user disabled"
 fi
 
-if [ "$INSTALL_DOCKER" = true ]; then
-    popos_install_docker
+[ "${INSTALL_DOCKER:-false}" = true ] && stage_optional "docker" popos_install_docker || stage_skip "docker" "user disabled"
+
+if [ "${INSTALL_SSH:-skip}" != "skip" ]; then
+    stage_optional "ssh" popos_setup_ssh
+else
+    stage_skip "ssh" "user disabled"
 fi
 
-if [ "$INSTALL_OHMYZSH" = true ]; then
-    popos_install_ohmyzsh
-fi
+run_required "shell loading" popos_config_shell_chain
+run_required "verify" popos_verify
+stage_optional "system summary" popos_summary
 
-popos_setup_ssh
-popos_config_shell_chain
+stage_summary
 
-# ============================================================
-# Verify + Summary
-# ============================================================
-popos_verify
-popos_summary
-
+echo ""
 echo "========================================"
-echo " ✅ PopOS 环境配置完成！"
+echo " ✅ PopOS 环境配置流程完成"
 echo ""
 echo "  下一步:"
 echo "    重新登录或执行: source ~/.zshrc"
