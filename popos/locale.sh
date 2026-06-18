@@ -15,13 +15,22 @@ popos_setup_locale() {
         echo "  [SKIP] zh_CN.UTF-8 已生成"
     else
         sudo sed -i 's/^# *\(zh_CN.UTF-8 UTF-8\)/\1/' /etc/locale.gen
-        sudo locale-gen zh_CN.UTF-8 2>/dev/null
-        sudo update-locale LANG=zh_CN.UTF-8 2>/dev/null
+        if ! sudo locale-gen zh_CN.UTF-8; then
+            fail "zh_CN.UTF-8 locale 生成失败"
+            return 1
+        fi
+        if ! sudo update-locale LANG=zh_CN.UTF-8; then
+            fail "系统 locale 更新失败"
+            return 1
+        fi
         ok "zh_CN.UTF-8 locale 已生成"
     fi
 
     echo ">>> fcitx5 中文输入法 <<<"
-    sudo apt-get install -y -qq im-config fcitx5 fcitx5-rime fcitx5-chinese-addons fcitx5-config-qt
+    if ! sudo apt-get install -y -qq im-config fcitx5 fcitx5-rime fcitx5-chinese-addons fcitx5-config-qt; then
+        fail "fcitx5 输入法安装失败"
+        return 1
+    fi
     if command -v fcitx5 &>/dev/null; then
         ok "fcitx5 + rime 输入法已安装"
     else
@@ -30,10 +39,15 @@ popos_setup_locale() {
     fi
 
     if command -v im-config &>/dev/null; then
-        im-config -n fcitx5 && ok "im-config 已切换为 fcitx5" || \
-            warn "im-config 配置失败，请手动运行: im-config -n fcitx5"
+        if im-config -n fcitx5; then
+            ok "im-config 已切换为 fcitx5"
+        else
+            fail "im-config 配置失败，请手动运行: im-config -n fcitx5"
+            return 1
+        fi
     else
-        warn "im-config 未安装，无法自动切换输入法框架"
+        fail "im-config 未安装，无法自动切换输入法框架"
+        return 1
     fi
 
     # Auto-start on desktop login
