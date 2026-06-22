@@ -64,6 +64,16 @@ stage_has_failures() {
     return 1
 }
 
+stage_has_warnings() {
+    local status
+    for status in "${STAGE_STATUSES[@]}"; do
+        if [ "$status" = "WARN" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 stage_summary() {
     echo ""
     echo "========================================"
@@ -82,4 +92,18 @@ stage_summary() {
         fi
     done
     echo "========================================"
+}
+
+stage_finish() {
+    local flow_name="${1:-flow}"
+    stage_summary
+    if stage_has_failures; then
+        echo "  FAILED: $flow_name"
+        return 1
+    fi
+    if stage_has_warnings; then
+        echo "  COMPLETED WITH WARNINGS: $flow_name"
+        return 0
+    fi
+    echo "  SUCCESS: $flow_name"
 }

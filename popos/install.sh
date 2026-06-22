@@ -12,6 +12,7 @@ popos_install_tools() {
         build-essential
         unzip tar gzip bzip2 xz-utils
         software-properties-common apt-transport-https
+        python3
         zsh
     )
     local optional_packages=(
@@ -59,8 +60,11 @@ popos_install_tools() {
     echo ""
     # fd-find → fd alias (PopOS package installs as fdfind)
     if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
-        sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd 2>/dev/null && \
+        if sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd; then
             echo "  [OK] fd 别名已创建 (fdfind → fd)"
+        else
+            warn "fd 别名创建失败"
+        fi
     fi
 }
 
@@ -71,7 +75,10 @@ popos_install_chrome() {
         return
     fi
 
-    sudo install -m 0755 -d /etc/apt/keyrings
+    if ! sudo install -m 0755 -d /etc/apt/keyrings; then
+        echo "  [WARN] 无法创建 apt keyring 目录"
+        return 1
+    fi
     if ! curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo tee /etc/apt/keyrings/google.asc >/dev/null; then
         echo "  [WARN] Google Chrome 签名密钥下载失败"
         return 1
