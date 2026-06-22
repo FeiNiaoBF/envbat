@@ -1,32 +1,33 @@
 #!/usr/bin/env bash
-# === envbat — Restore Tool ===
-# Restores user state from /data/backups/envbat. System restore is opt-in.
+# === envbat validated restore ===
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/interactive.sh"
-source "$SCRIPT_DIR/runner.sh"
+RESTORE_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=popos/interactive.sh
+source "$RESTORE_SCRIPT_DIR/interactive.sh"
+# shellcheck source=popos/runner.sh
+source "$RESTORE_SCRIPT_DIR/runner.sh"
 
-BACKUP_BASE="/data/backups/envbat"
+BACKUP_BASE="${ENVBAT_BACKUP_BASE:-${BACKUP_BASE:-/data/backups/envbat}}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 INTERACTIVE=false
+SHOW_HELP=false
 RESTORE_DATE=""
 RESTORE_DIR=""
 RESTORE_DIR_REAL=""
+RESTORE_INSTALL_BASE=""
+RESTORE_WORK_DIR=""
 SAFE_DIR=""
 
-has_dotfiles=false
-has_packages=false
-has_sysconfig=false
-has_dirtree=false
-has_gitrepos=false
-has_manifest=false
+declare -A RESTORE_MODULE_STATUS=()
+declare -A RESTORE_MODULE_PATH=()
 
 show_help() {
     echo "用法: $0 [选项]"
     echo ""
     echo "选项:"
-    echo "  -i            交互模式 — 逐项确认是否恢复"
-    echo "  -d <时间戳>    指定备份日期 (如 2026-06-14T1530+0800)"
+    echo "  -i            高级交互模式（系统配置和包恢复）"
+    echo "  -d <时间戳>   指定备份日期"
     echo "  --help        显示帮助"
 }
 
@@ -42,46 +43,68 @@ parse_args() {
                 RESTORE_DATE="$2"
                 shift 2
                 ;;
-            --help|-h) show_help; exit 0 ;;
-            *) warn "未知参数: $1"; return 1 ;;
+            --help|-h) SHOW_HELP=true; shift ;;
+            *) fail "未知参数: $1"; return 1 ;;
         esac
     done
 }
 
+module_is_ok() {
+    [ "${RESTORE_MODULE_STATUS[$1]:-skip}" = ok ]
+}
+
+module_path() {
+    printf '%s' "${RESTORE_MODULE_PATH[$1]:-}"
+}
+
 restore_precheck() {
+    local modules_output name status path requirement _sensitivity
+    RESTORE_MODULE_STATUS=()
+    RESTORE_MODULE_PATH=()
+
     if [ -n "$RESTORE_DATE" ]; then
         RESTORE_DIR="$BACKUP_BASE/$RESTORE_DATE"
     else
         RESTORE_DIR="$BACKUP_BASE/latest"
     fi
-
     if [ ! -d "$RESTORE_DIR" ]; then
         fail "备份目录不存在: $RESTORE_DIR"
         return 1
     fi
-
-    RESTORE_DIR_REAL=$(cd "$RESTORE_DIR" && pwd)
-    [ -f "$RESTORE_DIR/manifest.json" ] && has_manifest=true
-    [ -f "$RESTORE_DIR/dotfiles.tar.gz" ] && has_dotfiles=true
-    [ -f "$RESTORE_DIR/packages.txt" ] && has_packages=true
-    [ -f "$RESTORE_DIR/apt-sources.tar.gz" ] && has_sysconfig=true
-    [ -f "$RESTORE_DIR/directory-tree.txt" ] && has_dirtree=true
-    [ -f "$RESTORE_DIR/git-repos.txt" ] && has_gitrepos=true
-
-    info "恢复来源: $RESTORE_DIR_REAL"
-    if $has_manifest; then
-        echo "  [OK]  manifest.json"
-    else
-        echo "  [SKIP] manifest.json 不存在，使用旧备份文件探测"
+    if [ ! -f "$RESTORE_DIR/manifest.json" ]; then
+        fail "缺少 manifest.json；恢复只接受 schema v2 备份"
+        return 1
     fi
+    if ! "$PYTHON_BIN" "$RESTORE_SCRIPT_DIR/manifest.py" validate "$RESTORE_DIR" >/dev/null; then
+        fail "manifest v2、required 模块或校验和验证失败"
+        return 1
+    fi
+    if ! RESTORE_DIR_REAL=$(cd "$RESTORE_DIR" && pwd -P); then
+        fail "无法解析备份目录"
+        return 1
+    fi
+    if ! RESTORE_INSTALL_BASE=$("$PYTHON_BIN" "$RESTORE_SCRIPT_DIR/manifest.py" get "$RESTORE_DIR" install_base); then
+        fail "无法读取 install_base"
+        return 1
+    fi
+    if ! modules_output=$("$PYTHON_BIN" "$RESTORE_SCRIPT_DIR/manifest.py" modules "$RESTORE_DIR"); then
+        fail "无法读取 manifest 模块"
+        return 1
+    fi
+    while IFS=$'\t' read -r name status path requirement _sensitivity; do
+        [ -n "$name" ] || continue
+        RESTORE_MODULE_STATUS["$name"]="$status"
+        [ "$path" = - ] && path=""
+        RESTORE_MODULE_PATH["$name"]="$path"
+        printf '  [%-4s] %-16s %s\n' "${status^^}" "$name" "$requirement"
+    done <<< "$modules_output"
 
-    echo "--- 备份内容 ---"
-    $has_dotfiles && echo "  [found] dotfiles" || echo "  [miss]  dotfiles"
-    $has_packages && echo "  [found] 包列表" || echo "  [miss]  包列表"
-    $has_sysconfig && echo "  [found] 系统配置" || echo "  [miss]  系统配置"
-    $has_dirtree && echo "  [found] 目录结构" || echo "  [miss]  目录结构"
-    $has_gitrepos && echo "  [found] Git 仓库列表" || echo "  [miss]  Git 仓库列表"
-
+    if ! module_is_ok dotfiles; then
+        fail "required dotfiles 模块不可用"
+        return 1
+    fi
+    info "恢复来源: $RESTORE_DIR_REAL"
+    info "目录基准: $RESTORE_INSTALL_BASE"
     if ! ask_yes_no "开始恢复用户态内容?" "Y"; then
         info "已取消"
         return 1
@@ -89,224 +112,326 @@ restore_precheck() {
 }
 
 create_safety_snapshot() {
-    SAFE_DIR="/tmp/envbat-restore-backup-$(date +%Y%m%d%H%M%S)"
-    mkdir -p "$SAFE_DIR"
-
-    for item in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.gitconfig" "$HOME/.gitignore_global" "$HOME/.ssh" "$HOME/.config/nvim" "$HOME/.config/envbat/profile.sh"; do
-        if [ -e "$item" ]; then
-            local rel="${item#$HOME/}"
-            local dest="$SAFE_DIR/$rel"
-            mkdir -p "$(dirname "$dest")"
-            cp -a "$item" "$dest" 2>/dev/null || true
-        fi
-    done
-
-    ok "当前文件已备份到: $SAFE_DIR"
-    echo "  如需回滚: cp -a $SAFE_DIR/. ~/"
-}
-
-extract_dotfiles() {
-    local tmp_dir="$1"
-    tar -xzf "$RESTORE_DIR/dotfiles.tar.gz" -C "$tmp_dir"
-}
-
-restore_dotfiles() {
-    local tmp_dir
-    tmp_dir=$(mktemp -d)
-    if ! extract_dotfiles "$tmp_dir"; then
-        rm -rf "$tmp_dir"
-        fail "dotfiles 解压失败"
+    local safe_root="${ENVBAT_SAFE_ROOT:-${TMPDIR:-/tmp}}" item rel dest
+    if ! mkdir -p "$safe_root"; then
+        fail "无法准备安全快照目录: $safe_root"
+        return 1
+    fi
+    if ! SAFE_DIR=$(mktemp -d "$safe_root/envbat-restore-snapshot.XXXXXX") || ! chmod 700 "$SAFE_DIR"; then
+        fail "无法创建安全快照"
+        return 1
+    fi
+    if ! mkdir -p "$SAFE_DIR/home" || ! chmod 700 "$SAFE_DIR/home"; then
+        rm -rf -- "$SAFE_DIR"
+        SAFE_DIR=""
         return 1
     fi
 
-    for item in .bashrc .zshrc .gitconfig .gitignore_global; do
-        if [ -f "$tmp_dir/$item" ]; then
-            cp "$tmp_dir/$item" "$HOME/$item"
-            echo "  [OK]  ~/$item"
+    for item in \
+        "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.p10k.zsh" \
+        "$HOME/.gitconfig" "$HOME/.gitignore_global" "$HOME/.ssh" \
+        "$HOME/.config/nvim" "$HOME/.config/envbat/profile.sh" \
+        "$HOME/.oh-my-zsh/custom"; do
+        [ -e "$item" ] || [ -L "$item" ] || continue
+        rel="${item#$HOME/}"
+        dest="$SAFE_DIR/home/$rel"
+        if ! mkdir -p "$(dirname "$dest")" || ! cp -a "$item" "$dest"; then
+            rm -rf -- "$SAFE_DIR"
+            SAFE_DIR=""
+            fail "安全快照复制失败: $item"
+            return 1
         fi
     done
-
-    if [ -f "$tmp_dir/envbat/profile.sh" ]; then
-        mkdir -p "$HOME/.config/envbat"
-        cp "$tmp_dir/envbat/profile.sh" "$HOME/.config/envbat/profile.sh"
-        echo "  [OK]  envbat profile"
-    fi
-
-    if [ -d "$tmp_dir/nvim" ]; then
-        mkdir -p "$HOME/.config"
-        rm -rf "$HOME/.config/nvim"
-        cp -a "$tmp_dir/nvim" "$HOME/.config/"
-        echo "  [OK]  Neovim 配置"
-    fi
-
-    if [ -d "$tmp_dir/oh-my-zsh-custom" ]; then
-        mkdir -p "$HOME/.oh-my-zsh/custom"
-        cp -a "$tmp_dir/oh-my-zsh-custom/." "$HOME/.oh-my-zsh/custom/"
-        echo "  [OK]  oh-my-zsh 自定义"
-    fi
-
-    rm -rf "$tmp_dir"
-    ok "用户态 dotfiles 恢复完成"
-}
-
-restore_ssh() {
-    local tmp_dir
-    tmp_dir=$(mktemp -d)
-    if ! extract_dotfiles "$tmp_dir"; then
-        rm -rf "$tmp_dir"
-        fail "dotfiles 解压失败，无法恢复 SSH"
+    if ! find "$SAFE_DIR" -type d -exec chmod 700 {} + || ! find "$SAFE_DIR" -type f -exec chmod 600 {} +; then
+        rm -rf -- "$SAFE_DIR"
+        SAFE_DIR=""
+        fail "安全快照权限设置失败"
         return 1
     fi
+    ok "安全快照: $SAFE_DIR"
+}
 
-    if [ ! -d "$tmp_dir/ssh" ]; then
-        rm -rf "$tmp_dir"
-        echo "  [SKIP] 备份中没有 SSH 目录"
-        return 0
+prepare_restore_payload() {
+    local archive
+    archive="$(module_path dotfiles)"
+    if [ -z "$archive" ]; then
+        fail "dotfiles 模块没有归档路径"
+        return 1
     fi
-
-    if ! ask_yes_no "检测到 SSH 备份，是否恢复 ~/.ssh? 这会覆盖当前 SSH 文件" "N"; then
-        rm -rf "$tmp_dir"
-        echo "  [SKIP] 用户跳过 SSH 恢复"
-        return 0
+    if ! RESTORE_WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/envbat-restore.XXXXXX") || ! chmod 700 "$RESTORE_WORK_DIR"; then
+        fail "无法创建恢复临时目录"
+        return 1
     fi
+    if ! "$PYTHON_BIN" "$RESTORE_SCRIPT_DIR/manifest.py" extract-tar "$RESTORE_DIR/$archive" "$RESTORE_WORK_DIR"; then
+        rm -rf -- "$RESTORE_WORK_DIR"
+        RESTORE_WORK_DIR=""
+        fail "dotfiles 归档不安全或无法解压"
+        return 1
+    fi
+}
 
-    mkdir -p "$HOME/.ssh"
-    cp -a "$tmp_dir/ssh/." "$HOME/.ssh/"
-    chmod 700 "$HOME/.ssh"
-    [ -f "$HOME/.ssh/id_ed25519" ] && chmod 600 "$HOME/.ssh/id_ed25519"
-    [ -f "$HOME/.ssh/id_ed25519.pub" ] && chmod 644 "$HOME/.ssh/id_ed25519.pub"
-    rm -rf "$tmp_dir"
+atomic_replace_file() {
+    local source="$1" target="$2" mode="${3:-600}" parent temporary
+    parent=$(dirname "$target")
+    if ! mkdir -p "$parent"; then
+        return 1
+    fi
+    if ! temporary=$(mktemp "$parent/.envbat-$(basename "$target").XXXXXX"); then
+        return 1
+    fi
+    if ! cp "$source" "$temporary" || ! chmod "$mode" "$temporary" || ! mv -f "$temporary" "$target"; then
+        rm -f -- "$temporary"
+        return 1
+    fi
+}
+
+atomic_replace_dir() {
+    local source="$1" target="$2" mode="${3:-700}" parent name staged previous had_previous=false
+    parent=$(dirname "$target")
+    name=$(basename "$target")
+    if ! mkdir -p "$parent" || ! staged=$(mktemp -d "$parent/.envbat-$name.new.XXXXXX"); then
+        return 1
+    fi
+    if ! cp -a "$source/." "$staged/" || ! chmod "$mode" "$staged"; then
+        rm -rf -- "$staged"
+        return 1
+    fi
+    previous="$parent/.envbat-$name.old.$$"
+    if [ -e "$target" ] || [ -L "$target" ]; then
+        if ! mv "$target" "$previous"; then
+            rm -rf -- "$staged"
+            return 1
+        fi
+        had_previous=true
+    fi
+    if ! mv "$staged" "$target"; then
+        $had_previous && mv "$previous" "$target"
+        rm -rf -- "$staged"
+        return 1
+    fi
+    if $had_previous && ! rm -rf -- "$previous"; then
+        return 1
+    fi
+}
+
+restore_user_state() {
+    local item
+    for item in .bashrc .zshrc .p10k.zsh .gitconfig .gitignore_global; do
+        if [ -f "$RESTORE_WORK_DIR/$item" ]; then
+            atomic_replace_file "$RESTORE_WORK_DIR/$item" "$HOME/$item" 600 || {
+                fail "恢复失败: ~/$item"
+                return 1
+            }
+        fi
+    done
+    if [ -f "$RESTORE_WORK_DIR/envbat/profile.sh" ]; then
+        atomic_replace_file "$RESTORE_WORK_DIR/envbat/profile.sh" "$HOME/.config/envbat/profile.sh" 600 || return 1
+    fi
+    if [ -d "$RESTORE_WORK_DIR/nvim" ]; then
+        atomic_replace_dir "$RESTORE_WORK_DIR/nvim" "$HOME/.config/nvim" 700 || return 1
+    fi
+    if [ -d "$RESTORE_WORK_DIR/oh-my-zsh-custom" ]; then
+        atomic_replace_dir "$RESTORE_WORK_DIR/oh-my-zsh-custom" "$HOME/.oh-my-zsh/custom" 700 || return 1
+    fi
+    ok "用户配置已恢复"
+}
+
+restore_ssh_files() {
+    if ! atomic_replace_dir "$RESTORE_WORK_DIR/ssh" "$HOME/.ssh" 700; then
+        fail "SSH 原子恢复失败"
+        return 1
+    fi
+    if ! find "$HOME/.ssh" -type d -exec chmod 700 {} + || \
+        ! find "$HOME/.ssh" -type f -exec chmod 600 {} + || \
+        ! find "$HOME/.ssh" -type f -name '*.pub' -exec chmod 644 {} +; then
+        fail "SSH 权限校验失败"
+        return 1
+    fi
     ok "SSH 已恢复"
 }
 
 restore_directory_tree() {
+    local tree_file validated dir
+    tree_file="$(module_path directory_tree)"
+    if ! validated=$("$PYTHON_BIN" "$RESTORE_SCRIPT_DIR/manifest.py" tree-list "$RESTORE_INSTALL_BASE" "$RESTORE_DIR/$tree_file"); then
+        fail "目录树包含越界路径"
+        return 1
+    fi
     while IFS= read -r dir; do
-        [ -z "$dir" ] && continue
-        if [ ! -d "$dir" ]; then
-            mkdir -p "$dir"
-            echo "  [CREATE] $dir"
-        else
-            echo "  [EXISTS] $dir"
+        [ -n "$dir" ] || continue
+        if ! mkdir -p "$dir"; then
+            fail "目录创建失败: $dir"
+            return 1
         fi
-    done < "$RESTORE_DIR/directory-tree.txt"
-    ok "目录结构恢复完成"
+    done <<< "$validated"
+    ok "目录结构已恢复"
 }
 
 restore_git_repos() {
-    while IFS= read -r line; do
-        local repo_path repo_url target
-        repo_path=$(echo "$line" | sed -n 's/^\[\(.*\)\] \(.*\)$/\1/p')
-        repo_url=$(echo "$line" | sed -n 's/^\[\(.*\)\] \(.*\)$/\2/p')
-        if [ -z "$repo_path" ] || [ -z "$repo_url" ]; then
+    local repos_file entries relative_path remote_url target failures=0 cloned=0
+    repos_file="$(module_path git_repos)"
+    if ! command -v git >/dev/null 2>&1; then
+        fail "git 不可用"
+        return 1
+    fi
+    if ! entries=$("$PYTHON_BIN" "$RESTORE_SCRIPT_DIR/manifest.py" repos-list "$RESTORE_DIR/$repos_file"); then
+        fail "Git 仓库清单无效"
+        return 1
+    fi
+    while IFS=$'\t' read -r relative_path remote_url; do
+        [ -n "$relative_path" ] || continue
+        target="$HOME/$relative_path"
+        if [ -e "$target" ] || [ -L "$target" ]; then
+            echo "  [SKIP] $relative_path 已存在，不 pull"
             continue
         fi
-        target="$HOME/$repo_path"
-        if [ -d "$target/.git" ]; then
-            echo "  [SKIP] $repo_path (已存在，不 pull)"
+        if ! mkdir -p "$(dirname "$target")" || ! git clone "$remote_url" "$target"; then
+            warn "克隆失败: $relative_path"
+            failures=$((failures + 1))
         else
-            mkdir -p "$(dirname "$target")"
-            if git clone "$repo_url" "$target"; then
-                echo "  [CLONE] $repo_path"
-            else
-                warn "克隆失败: $repo_path"
-            fi
+            cloned=$((cloned + 1))
         fi
-    done < "$RESTORE_DIR/git-repos.txt"
-    ok "Git 仓库恢复完成"
+    done <<< "$entries"
+    echo "  cloned=$cloned failed=$failures"
+    [ "$failures" -eq 0 ]
 }
 
-restore_sysconfig() {
-    if ! ask_yes_no "高级选项：恢复 apt sources/hosts/hostname/crontab? 默认不建议" "N"; then
-        echo "  [SKIP] 用户跳过系统配置恢复"
-        return 0
-    fi
-
-    local tmp_dir
-    tmp_dir=$(mktemp -d)
-    if ! tar -xzf "$RESTORE_DIR/apt-sources.tar.gz" -C "$tmp_dir"; then
-        rm -rf "$tmp_dir"
-        fail "系统配置解压失败"
+restore_system_config_advanced() {
+    local archive work failures=0
+    archive="$(module_path sysconfig)"
+    if ! work=$(mktemp -d "${TMPDIR:-/tmp}/envbat-sysconfig.XXXXXX") || \
+        ! "$PYTHON_BIN" "$RESTORE_SCRIPT_DIR/manifest.py" extract-tar "$RESTORE_DIR/$archive" "$work"; then
+        [ -z "${work:-}" ] || rm -rf -- "$work"
         return 1
     fi
 
-    if [ -f "$tmp_dir/apt/sources.list" ]; then
-        sudo cp "$tmp_dir/apt/sources.list" /etc/apt/sources.list
-        echo "  [OK]  apt sources.list"
+    if ask_yes_no "恢复 apt sources?" "N"; then
+        if [ -f "$work/sources.list" ] && ! sudo install -m 644 "$work/sources.list" /etc/apt/sources.list; then
+            failures=$((failures + 1))
+        fi
+        if [ -d "$work/sources.list.d" ] && ! sudo cp -a "$work/sources.list.d/." /etc/apt/sources.list.d/; then
+            failures=$((failures + 1))
+        fi
     fi
-    if [ -d "$tmp_dir/apt/sources.list.d" ]; then
-        sudo cp -a "$tmp_dir/apt/sources.list.d/." /etc/apt/sources.list.d/
-        echo "  [OK]  apt sources.list.d"
+    if ask_yes_no "恢复 hostname 和 hosts?" "N"; then
+        if [ -f "$work/hostname" ] && ! sudo install -m 644 "$work/hostname" /etc/hostname; then failures=$((failures + 1)); fi
+        if [ -f "$work/hosts" ] && ! sudo install -m 644 "$work/hosts" /etc/hosts; then failures=$((failures + 1)); fi
     fi
-    if [ -f "$tmp_dir/crontab.txt" ] && [ -s "$tmp_dir/crontab.txt" ]; then
-        crontab "$tmp_dir/crontab.txt"
-        echo "  [OK]  crontab"
+    if ask_yes_no "恢复用户 crontab?" "N"; then
+        if [ -s "$work/crontab.txt" ] && ! crontab "$work/crontab.txt"; then failures=$((failures + 1)); fi
     fi
-    if [ -f "$tmp_dir/hostname" ]; then
-        sudo cp "$tmp_dir/hostname" /etc/hostname
-        echo "  [OK]  hostname"
+    if [ -d "$work/netplan" ]; then
+        warn "netplan 不会自动恢复；请从 system-config.tar.gz 手工检查"
     fi
-    if [ -f "$tmp_dir/hosts" ]; then
-        sudo cp "$tmp_dir/hosts" /etc/hosts
-        echo "  [OK]  hosts"
-    fi
-    rm -rf "$tmp_dir"
+    rm -rf -- "$work"
+    [ "$failures" -eq 0 ]
 }
 
 restore_packages() {
-    if ! ask_yes_no "高级选项：完整恢复 apt 包选择? 默认不建议" "N"; then
-        echo "  [SKIP] 用户跳过包列表恢复"
+    local packages_file
+    packages_file="$(module_path packages)"
+    if ! sudo dpkg --clear-selections || \
+        ! sudo dpkg --set-selections < "$RESTORE_DIR/$packages_file" || \
+        ! sudo apt-get dselect-upgrade -y; then
+        fail "apt 包选择恢复失败"
+        return 1
+    fi
+}
+
+run_setup_repair() {
+    "$RESTORE_SCRIPT_DIR/setup.sh" --repair
+}
+
+restore_cleanup() {
+    if [ -n "$RESTORE_WORK_DIR" ] && [ -d "$RESTORE_WORK_DIR" ]; then
+        rm -rf -- "$RESTORE_WORK_DIR"
+    fi
+    RESTORE_WORK_DIR=""
+}
+
+restore_required_or_stop() {
+    local name="$1"
+    shift
+    if stage_required "$name" "$@"; then
         return 0
     fi
-    sudo dpkg --clear-selections
-    sudo dpkg --set-selections < "$RESTORE_DIR/packages.txt"
-    sudo apt-get dselect-upgrade -y
+    restore_cleanup
+    stage_finish "restore" || true
+    return 1
 }
 
-maybe_run_repair() {
-    if ask_yes_no "是否现在运行 ./popos/setup.sh --repair 补装依赖?" "N"; then
-        "$SCRIPT_DIR/setup.sh" --repair
-    else
-        echo "  [SKIP] 用户稍后手动运行 setup repair"
+restore_main() {
+    if ! parse_args "$@"; then
+        return 1
     fi
+    if $SHOW_HELP; then
+        show_help
+        return 0
+    fi
+    STAGE_NAMES=(); STAGE_STATUSES=(); STAGE_REQUIRED=(); STAGE_MESSAGES=()
+
+    echo ""
+    echo "################################################"
+    echo "#  envbat 安全恢复                             #"
+    echo "################################################"
+
+    restore_required_or_stop "restore precheck" restore_precheck || return 1
+    restore_required_or_stop "safety snapshot" create_safety_snapshot || return 1
+    restore_required_or_stop "dotfiles payload" prepare_restore_payload || return 1
+    restore_required_or_stop "user state" restore_user_state || return 1
+
+    if [ -d "$RESTORE_WORK_DIR/ssh" ]; then
+        if ask_yes_no "单独恢复 ~/.ssh? 这会替换当前 SSH 目录" "N"; then
+            stage_optional "ssh" restore_ssh_files
+        else
+            stage_skip "ssh" "user declined"
+        fi
+    else
+        stage_skip "ssh" "backup missing"
+    fi
+
+    if module_is_ok directory_tree; then
+        stage_optional "directory tree" restore_directory_tree
+    else
+        stage_skip "directory tree" "manifest status ${RESTORE_MODULE_STATUS[directory_tree]:-skip}"
+    fi
+    if module_is_ok git_repos; then
+        stage_optional "git repos" restore_git_repos
+    else
+        stage_skip "git repos" "manifest status ${RESTORE_MODULE_STATUS[git_repos]:-skip}"
+    fi
+
+    if $INTERACTIVE && module_is_ok sysconfig; then
+        stage_optional "system config advanced" restore_system_config_advanced
+    else
+        stage_skip "system config advanced" "advanced mode only"
+    fi
+    if $INTERACTIVE && module_is_ok packages; then
+        if ask_yes_no "完整恢复 apt 包选择?" "N"; then
+            stage_optional "packages advanced" restore_packages
+        else
+            stage_skip "packages advanced" "user declined"
+        fi
+    else
+        stage_skip "packages advanced" "advanced mode only"
+    fi
+
+    if ask_yes_no "运行 ./popos/setup.sh --repair 补装依赖?" "N"; then
+        stage_optional "setup repair" run_setup_repair
+    else
+        stage_skip "setup repair" "user declined"
+    fi
+    stage_optional "cleanup" restore_cleanup
+
+    if ! stage_finish "restore"; then
+        return 1
+    fi
+    echo "  来源: $RESTORE_DIR_REAL"
+    echo "  安全快照: $SAFE_DIR"
+    echo "  回滚命令: cp -a '$SAFE_DIR/home/.' '$HOME/'"
 }
 
-parse_args "$@"
-
-echo ""
-echo "################################################"
-echo "#  envbat 恢复工具                             #"
-echo "################################################"
-echo ""
-
-stage_required "restore precheck" restore_precheck || { stage_summary; exit 1; }
-stage_required "safety snapshot" create_safety_snapshot || { stage_summary; exit 1; }
-
-$has_dotfiles && stage_optional "dotfiles" restore_dotfiles || stage_skip "dotfiles" "backup missing"
-$has_dotfiles && stage_optional "ssh" restore_ssh || stage_skip "ssh" "backup missing"
-$has_dirtree && stage_optional "directory tree" restore_directory_tree || stage_skip "directory tree" "backup missing"
-$has_gitrepos && stage_optional "git repos" restore_git_repos || stage_skip "git repos" "backup missing"
-
-if $INTERACTIVE && $has_sysconfig; then
-    stage_optional "system config advanced" restore_sysconfig
-else
-    stage_skip "system config advanced" "default skip"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    trap restore_cleanup EXIT
+    restore_main "$@"
 fi
-
-if $INTERACTIVE && $has_packages; then
-    stage_optional "packages advanced" restore_packages
-else
-    stage_skip "packages advanced" "default skip"
-fi
-
-stage_optional "setup repair prompt" maybe_run_repair
-stage_summary
-
-echo ""
-echo "========================================"
-echo " ✅ 恢复流程完成"
-echo ""
-echo "  来源: $RESTORE_DIR_REAL"
-echo "  原始文件备份在: $SAFE_DIR"
-echo "  如需回滚:"
-echo "    cp -a $SAFE_DIR/. ~/"
-echo "========================================"

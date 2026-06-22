@@ -17,21 +17,26 @@ popos_install_neovim() {
         fail "无法获取 Neovim 下载地址"
         return 1
     fi
-    if ! curl -#L "$url" | sudo tar -C "$INSTALL_BASE/tools" -xz; then
+    if ! curl -#L "$url" | tar -C "$INSTALL_BASE/tools" -xz; then
         fail "Neovim 下载/解压失败"
         return 1
     fi
     # The extracted name is nvim-linux-x86_64, rename to neovim
     if [ -d "$INSTALL_BASE/tools/nvim-linux-x86_64" ]; then
-        mv "$INSTALL_BASE/tools/nvim-linux-x86_64" "$nvim_root"
+        if ! mv "$INSTALL_BASE/tools/nvim-linux-x86_64" "$nvim_root"; then
+            fail "Neovim 安装目录重命名失败"
+            return 1
+        fi
     fi
     if [ ! -x "$nvim_bin" ]; then
         fail "Neovim 安装后未找到 $nvim_bin"
         return 1
     fi
     # Symlink
-    mkdir -p "$HOME/Tools/bin"
-    ln -sf "$nvim_bin" "$HOME/Tools/bin/nvim"
+    if ! mkdir -p "$HOME/Tools/bin" || ! ln -sf "$nvim_bin" "$HOME/Tools/bin/nvim"; then
+        fail "Neovim 命令链接创建失败"
+        return 1
+    fi
     ok "Neovim 已安装"
 }
 
@@ -43,21 +48,30 @@ popos_install_nerd_font() {
         echo "  [SKIP] JetBrainsMono Nerd Font 已安装"
         return
     fi
-    mkdir -p "$font_dir"
+    if ! mkdir -p "$target"; then
+        fail "字体目录创建失败"
+        return 1
+    fi
     local url
     url="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip"
-    local tmp_zip="/tmp/JetBrainsMono-NF.zip"
+    local tmp_zip
+    if ! tmp_zip=$(mktemp "${TMPDIR:-/tmp}/JetBrainsMono-NF.XXXXXX.zip"); then
+        fail "字体临时文件创建失败"
+        return 1
+    fi
     if ! curl -#L "$url" -o "$tmp_zip"; then
         fail "Nerd Font 下载失败"
         return 1
     fi
-    if ! unzip -qo "$tmp_zip" -d "$font_dir/JetBrainsMonoNerdFont"; then
+    if ! unzip -qo "$tmp_zip" -d "$target"; then
         rm -f "$tmp_zip"
         fail "Nerd Font 解压失败"
         return 1
     fi
-    rm -f "$tmp_zip"
-    fc-cache -f "$font_dir" 2>/dev/null || true
+    if ! rm -f "$tmp_zip" || ! fc-cache -f "$font_dir"; then
+        fail "字体缓存刷新失败"
+        return 1
+    fi
     ok "JetBrainsMono Nerd Font 已安装"
     echo "  [HINT] 请在终端设置中选择 JetBrainsMono Nerd Font 作为字体"
 }

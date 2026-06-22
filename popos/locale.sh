@@ -14,7 +14,10 @@ popos_setup_locale() {
     if locale -a 2>/dev/null | grep -qi '^zh_CN\.utf8$'; then
         echo "  [SKIP] zh_CN.UTF-8 已生成"
     else
-        sudo sed -i 's/^# *\(zh_CN.UTF-8 UTF-8\)/\1/' /etc/locale.gen
+        if ! sudo sed -i 's/^# *\(zh_CN.UTF-8 UTF-8\)/\1/' /etc/locale.gen; then
+            fail "locale.gen 更新失败"
+            return 1
+        fi
         if ! sudo locale-gen zh_CN.UTF-8; then
             fail "zh_CN.UTF-8 locale 生成失败"
             return 1
@@ -51,12 +54,21 @@ popos_setup_locale() {
     fi
 
     # Auto-start on desktop login
-    mkdir -p "$HOME/.config/autostart"
+    if ! mkdir -p "$HOME/.config/autostart"; then
+        fail "输入法自启动目录创建失败"
+        return 1
+    fi
     if [ -f /usr/share/applications/org.fcitx.Fcitx5.desktop ]; then
-        cp /usr/share/applications/org.fcitx.Fcitx5.desktop "$HOME/.config/autostart/" 2>/dev/null || true
+        if ! cp /usr/share/applications/org.fcitx.Fcitx5.desktop "$HOME/.config/autostart/"; then
+            fail "fcitx5 自启动配置复制失败"
+            return 1
+        fi
         ok "fcitx5 自启动已配置"
     elif [ -f /usr/share/applications/fcitx5.desktop ]; then
-        cp /usr/share/applications/fcitx5.desktop "$HOME/.config/autostart/" 2>/dev/null || true
+        if ! cp /usr/share/applications/fcitx5.desktop "$HOME/.config/autostart/"; then
+            fail "fcitx5 自启动配置复制失败"
+            return 1
+        fi
         ok "fcitx5 自启动已配置"
     else
         warn "未找到 fcitx5 desktop 文件，请在系统设置中确认自启动"

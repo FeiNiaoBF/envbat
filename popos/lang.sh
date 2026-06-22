@@ -21,48 +21,60 @@ popos_install_go() {
     local arch="linux-amd64"
     local url="https://go.dev/dl/${go_ver}.${arch}.tar.gz"
     echo "  下载 $go_ver ..."
-    if curl -#L "$url" | sudo tar -C "$INSTALL_BASE/tools" -xz; then
+    if curl -#L "$url" | tar -C "$INSTALL_BASE/tools" -xz; then
         ok "Go 已安装: $go_ver"
     else
         fail "Go 下载/解压失败"
         return 1
     fi
-    # Symlink into ~/Tools/bin
-    mkdir -p "$HOME/Tools/bin"
-    ln -sf "$go_root/bin/go" "$HOME/Tools/bin/go"
+    if [ ! -x "$go_root/bin/go" ]; then
+        fail "Go 安装后未找到可执行文件"
+        return 1
+    fi
+    if ! mkdir -p "$HOME/Tools/bin" || ! ln -sf "$go_root/bin/go" "$HOME/Tools/bin/go"; then
+        fail "Go 命令链接创建失败"
+        return 1
+    fi
 }
 
 popos_install_nvm_node() {
     echo ">>> 安装 Node (via nvm) <<<"
     local nvm_dir="$INSTALL_BASE/tools/nvm"
-    if [ -d "$nvm_dir/.git" ]; then
+    if [ -s "$nvm_dir/nvm.sh" ]; then
         echo "  [SKIP] nvm 已安装"
         return
     fi
     export NVM_DIR="$nvm_dir"
+    if [ -e "$nvm_dir" ]; then
+        fail "nvm 目录存在但安装不完整，请先移走: $nvm_dir"
+        return 1
+    fi
     if ! git clone --depth 1 https://github.com/nvm-sh/nvm.git "$nvm_dir"; then
         fail "nvm 下载失败"
         return 1
     fi
-    # shellcheck source=/dev/null
     if [ ! -s "$nvm_dir/nvm.sh" ]; then
         fail "nvm.sh 不存在"
         return 1
     fi
+    # shellcheck source=/dev/null
     source "$nvm_dir/nvm.sh"
     if ! nvm install --lts; then
         fail "Node LTS 安装失败"
         return 1
     fi
     local node_ver
-    node_ver=$(node --version 2>/dev/null)
+    if ! node_ver=$(node --version 2>/dev/null); then
+        fail "Node 安装后无法执行"
+        return 1
+    fi
     ok "Node 已安装: $node_ver"
 }
 
 popos_install_pyenv() {
     echo ">>> 安装 Python (via pyenv) <<<"
     local pyenv_root="$INSTALL_BASE/tools/pyenv"
-    if [ -d "$pyenv_root" ]; then
+    if [ -x "$pyenv_root/bin/pyenv" ]; then
         echo "  [SKIP] pyenv 已安装"
         return
     fi
@@ -71,6 +83,10 @@ popos_install_pyenv() {
         libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm \
         libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev; then
         fail "pyenv 构建依赖安装失败"
+        return 1
+    fi
+    if [ -e "$pyenv_root" ]; then
+        fail "pyenv 目录存在但安装不完整，请先移走: $pyenv_root"
         return 1
     fi
     if ! git clone --depth 1 https://github.com/pyenv/pyenv.git "$pyenv_root"; then
@@ -93,24 +109,28 @@ popos_install_rustup() {
         fail "Rust 安装失败"
         return 1
     fi
+    if [ ! -x "$CARGO_HOME/bin/rustc" ] || [ ! -x "$CARGO_HOME/bin/cargo" ]; then
+        fail "Rust 安装后缺少 rustc/cargo"
+        return 1
+    fi
     ok "Rust 已安装"
-    # Symlink cargo binaries
-    mkdir -p "$HOME/Tools/bin"
-    ln -sf "$CARGO_HOME/bin/"* "$HOME/Tools/bin/" 2>/dev/null
 }
 
 popos_install_java() {
     echo ">>> 安装 Java <<<"
-    local java_ver="${JAVA_VERSION:-21}"
+    local java_ver="${INSTALL_JAVA:-21}"
     local java_root="$INSTALL_BASE/tools/java/jdk-$java_ver"
     if [ -x "$java_root/bin/java" ]; then
         echo "  [SKIP] Java 已安装"
         return
     fi
-    mkdir -p "$INSTALL_BASE/tools/java"
+    if ! mkdir -p "$INSTALL_BASE/tools/java"; then
+        fail "无法创建 Java 安装目录"
+        return 1
+    fi
     local url="https://download.oracle.com/java/${java_ver}/latest/jdk-${java_ver}_linux-x64_bin.tar.gz"
     echo "  下载 JDK $java_ver ..."
-    if ! curl -#L "$url" | sudo tar -C "$INSTALL_BASE/tools/java" -xz; then
+    if ! curl -#L "$url" | tar -C "$INSTALL_BASE/tools/java" -xz; then
         fail "JDK 下载/解压失败"
         return 1
     fi
@@ -122,19 +142,21 @@ popos_install_java() {
         return 1
     fi
     if [ -n "$extracted" ] && [ "$extracted" != "$java_root" ]; then
-        mv "$extracted" "$java_root"
+        if ! mv "$extracted" "$java_root"; then
+            fail "JDK 安装目录重命名失败"
+            return 1
+        fi
     fi
     ok "JDK $java_ver 已安装"
     # Symlink
-    mkdir -p "$HOME/Tools/bin"
-    ln -sf "$java_root/bin/java" "$HOME/Tools/bin/java"
-    ln -sf "$java_root/bin/javac" "$HOME/Tools/bin/javac"
-}
-
-popos_install_languages() {
-    [ "${INSTALL_GO:-false}" = true ] && popos_install_go
-    [ "${INSTALL_NVM_NODE:-false}" = true ] && popos_install_nvm_node
-    [ "${INSTALL_PYENV:-false}" = true ] && popos_install_pyenv
-    [ "${INSTALL_RUSTUP:-false}" = true ] && popos_install_rustup
-    [ "${INSTALL_JAVA:-skip}" != "skip" ] && popos_install_java
+    if [ ! -x "$java_root/bin/java" ] || [ ! -x "$java_root/bin/javac" ]; then
+        fail "JDK 安装后缺少 java/javac"
+        return 1
+    fi
+    if ! mkdir -p "$HOME/Tools/bin" || \
+        ! ln -sf "$java_root/bin/java" "$HOME/Tools/bin/java" || \
+        ! ln -sf "$java_root/bin/javac" "$HOME/Tools/bin/javac"; then
+        fail "Java 命令链接创建失败"
+        return 1
+    fi
 }

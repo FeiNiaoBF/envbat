@@ -1,280 +1,271 @@
 #!/usr/bin/env bash
-# === envbat — Backup Tool ===
-# Backs up user state, package list, system config, /data structure, and git repos.
+# === envbat secure backup ===
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/interactive.sh"
-source "$SCRIPT_DIR/runner.sh"
+BACKUP_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=popos/interactive.sh
+source "$BACKUP_SCRIPT_DIR/interactive.sh"
+# shellcheck source=popos/runner.sh
+source "$BACKUP_SCRIPT_DIR/runner.sh"
 
-BACKUP_BASE="/data/backups/envbat"
-TIMESTAMP=$(date +%Y-%m-%dT%H%M%S%z)
-BACKUP_DIR="$BACKUP_BASE/$TIMESTAMP"
+BACKUP_BASE="${ENVBAT_BACKUP_BASE:-${BACKUP_BASE:-/data/backups/envbat}}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+INSTALL_BASE="${INSTALL_BASE:-/data}"
+BACKUP_DIR=""
+FINAL_DIR=""
 
-DOTFILES_STATUS="missing"
-PACKAGES_STATUS="missing"
-SYSCONFIG_STATUS="missing"
-DIRTREE_STATUS="missing"
-GITREPOS_STATUS="missing"
+DOTFILES_STATUS=fail
+PACKAGES_STATUS=skip
+SYSCONFIG_STATUS=skip
+DIRTREE_STATUS=skip
+GITREPOS_STATUS=skip
 
 show_help() {
     echo "用法: $0 [--help]"
-    echo "  备份系统配置和用户状态到 $BACKUP_BASE"
+    echo "安全备份用户配置到 $BACKUP_BASE"
 }
 
-json_escape() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+backup_load_profile() {
+    local profile="$HOME/.config/envbat/profile.sh"
+    if [ -f "$profile" ]; then
+        # shellcheck source=/dev/null
+        if ! source "$profile"; then
+            fail "无法加载 envbat profile: $profile"
+            return 1
+        fi
+    fi
+    INSTALL_BASE="${INSTALL_BASE:-/data}"
+    case "$INSTALL_BASE" in
+        /) fail "INSTALL_BASE 不能是根目录 /"; return 1 ;;
+        /*) return 0 ;;
+        *) fail "INSTALL_BASE 必须是绝对路径: $INSTALL_BASE"; return 1 ;;
+    esac
 }
 
-create_backup_dir() {
-    mkdir -p "$BACKUP_DIR"
-    ok "创建备份目录: $BACKUP_DIR"
+backup_prepare_staging() {
+    if ! mkdir -p "$BACKUP_BASE" || ! chmod 700 "$BACKUP_BASE"; then
+        fail "无法准备备份根目录: $BACKUP_BASE"
+        return 1
+    fi
+    if [ -e "$FINAL_DIR" ]; then
+        fail "备份时间戳已存在: $FINAL_DIR"
+        return 1
+    fi
+    if ! mkdir -p "$BACKUP_DIR" || ! chmod 700 "$BACKUP_DIR"; then
+        fail "无法创建备份 staging 目录"
+        return 1
+    fi
 }
 
 backup_dotfiles() {
-    echo "--- 备份 dotfiles ---"
-    local dotfiles_dir
-    dotfiles_dir=$(mktemp -d)
+    DOTFILES_STATUS=fail
+    local work_dir src
+    if ! work_dir=$(mktemp -d "$BACKUP_DIR/.dotfiles.XXXXXX"); then
+        fail "无法创建 dotfiles 临时目录"
+        return 1
+    fi
 
-    for src in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.gitconfig" "$HOME/.gitignore_global"; do
-        if [ -f "$src" ]; then
-            if ! cp "$src" "$dotfiles_dir/"; then
-                rm -rf "$dotfiles_dir"
-                fail "复制 $(basename "$src") 失败"
-                return 1
-            fi
-            echo "  [OK]  $(basename "$src")"
-        else
-            echo "  [SKIP] $(basename "$src") (不存在)"
+    for src in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.p10k.zsh" "$HOME/.gitconfig" "$HOME/.gitignore_global"; do
+        if [ -f "$src" ] && ! cp "$src" "$work_dir/"; then
+            rm -rf -- "$work_dir"
+            fail "复制 $(basename "$src") 失败"
+            return 1
         fi
     done
-
     if [ -f "$HOME/.config/envbat/profile.sh" ]; then
-        mkdir -p "$dotfiles_dir/envbat"
-        if ! cp "$HOME/.config/envbat/profile.sh" "$dotfiles_dir/envbat/profile.sh"; then
-            rm -rf "$dotfiles_dir"
+        if ! mkdir -p "$work_dir/envbat" || ! cp "$HOME/.config/envbat/profile.sh" "$work_dir/envbat/profile.sh"; then
+            rm -rf -- "$work_dir"
             fail "复制 envbat profile 失败"
             return 1
         fi
-        echo "  [OK]  envbat profile"
     fi
-
     if [ -d "$HOME/.ssh" ]; then
-        mkdir -p "$dotfiles_dir/ssh"
-        if ! cp -a "$HOME/.ssh/." "$dotfiles_dir/ssh/"; then
-            rm -rf "$dotfiles_dir"
+        if ! mkdir -p "$work_dir/ssh" || ! cp -R "$HOME/.ssh/." "$work_dir/ssh/"; then
+            rm -rf -- "$work_dir"
             fail "复制 SSH 目录失败"
             return 1
         fi
-        echo "  [OK]  SSH 目录"
     fi
-
-    if [ -d "$HOME/.config/nvim" ]; then
-        if ! cp -a "$HOME/.config/nvim" "$dotfiles_dir/"; then
-            rm -rf "$dotfiles_dir"
-            fail "复制 Neovim 配置失败"
-            return 1
-        fi
-        echo "  [OK]  Neovim 配置"
+    if [ -d "$HOME/.config/nvim" ] && ! cp -R "$HOME/.config/nvim" "$work_dir/nvim"; then
+        rm -rf -- "$work_dir"
+        fail "复制 Neovim 配置失败"
+        return 1
     fi
-
     if [ -d "$HOME/.oh-my-zsh/custom" ]; then
-        mkdir -p "$dotfiles_dir/oh-my-zsh-custom"
-        if ! cp -a "$HOME/.oh-my-zsh/custom/." "$dotfiles_dir/oh-my-zsh-custom/"; then
-            rm -rf "$dotfiles_dir"
-            fail "复制 oh-my-zsh 自定义目录失败"
+        if ! mkdir -p "$work_dir/oh-my-zsh-custom" || ! cp -R "$HOME/.oh-my-zsh/custom/." "$work_dir/oh-my-zsh-custom/"; then
+            rm -rf -- "$work_dir"
+            fail "复制 oh-my-zsh custom 失败"
             return 1
         fi
-        echo "  [OK]  oh-my-zsh 自定义主题/插件"
     fi
 
-    if ! tar -czf "$BACKUP_DIR/dotfiles.tar.gz" -C "$dotfiles_dir" .; then
-        rm -rf "$dotfiles_dir"
+    if ! tar -czf "$BACKUP_DIR/dotfiles.tar.gz" -C "$work_dir" . || ! chmod 600 "$BACKUP_DIR/dotfiles.tar.gz"; then
+        rm -rf -- "$work_dir"
         fail "dotfiles 打包失败"
         return 1
     fi
-    rm -rf "$dotfiles_dir"
-    DOTFILES_STATUS="ok"
-    ok "dotfiles 已打包: dotfiles.tar.gz"
+    rm -rf -- "$work_dir"
+    DOTFILES_STATUS=ok
+    ok "dotfiles 已安全打包"
 }
 
 backup_packages() {
-    echo "--- 备份包列表 ---"
-    if ! dpkg --get-selections > "$BACKUP_DIR/packages.txt"; then
-        fail "导出包列表失败"
+    PACKAGES_STATUS=warn
+    if ! dpkg --get-selections > "$BACKUP_DIR/packages.txt" || ! chmod 600 "$BACKUP_DIR/packages.txt"; then
+        fail "包列表导出失败"
         return 1
     fi
-    PACKAGES_STATUS="ok"
-    local pkg_count
-    pkg_count=$(wc -l < "$BACKUP_DIR/packages.txt")
-    ok "包列表已导出: $pkg_count 个包"
+    PACKAGES_STATUS=ok
 }
 
 backup_sysconfig() {
-    echo "--- 备份系统配置 ---"
-    local sys_dir apt_dir
-    sys_dir=$(mktemp -d)
-    apt_dir="$sys_dir/apt"
-
-    if [ -d /etc/apt/sources.list.d ] || [ -f /etc/apt/sources.list ]; then
-        mkdir -p "$apt_dir"
-        if [ -f /etc/apt/sources.list ] && ! cp /etc/apt/sources.list "$apt_dir/"; then
-            rm -rf "$sys_dir"
-            fail "复制 apt sources.list 失败"
-            return 1
-        fi
-        if [ -d /etc/apt/sources.list.d ] && ! cp -a /etc/apt/sources.list.d "$apt_dir/"; then
-            rm -rf "$sys_dir"
-            fail "复制 apt sources.list.d 失败"
-            return 1
-        fi
-        echo "  [OK]  apt 源"
-    fi
-
-    crontab -l > "$sys_dir/crontab.txt" 2>/dev/null && echo "  [OK]  crontab" || echo "  [SKIP] crontab (无任务)"
-    if [ -f /etc/hostname ] && ! cp /etc/hostname "$sys_dir/"; then
-        rm -rf "$sys_dir"
-        fail "复制 hostname 失败"
+    SYSCONFIG_STATUS=warn
+    local work_dir
+    if ! work_dir=$(mktemp -d "$BACKUP_DIR/.sysconfig.XXXXXX"); then
+        fail "系统配置临时目录创建失败"
         return 1
     fi
-    if [ -f /etc/hosts ] && ! cp /etc/hosts "$sys_dir/"; then
-        rm -rf "$sys_dir"
-        fail "复制 hosts 失败"
-        return 1
-    fi
-    if [ -d /etc/netplan ] && ! cp -a /etc/netplan "$sys_dir/"; then
-        rm -rf "$sys_dir"
-        fail "复制 netplan 失败"
-        return 1
-    fi
-
-    if ! tar -czf "$BACKUP_DIR/apt-sources.tar.gz" -C "$sys_dir" .; then
-        rm -rf "$sys_dir"
+    if [ -f /etc/apt/sources.list ]; then cp /etc/apt/sources.list "$work_dir/" || { rm -rf -- "$work_dir"; return 1; }; fi
+    if [ -d /etc/apt/sources.list.d ]; then cp -R /etc/apt/sources.list.d "$work_dir/" || { rm -rf -- "$work_dir"; return 1; }; fi
+    crontab -l > "$work_dir/crontab.txt" 2>/dev/null || :
+    if [ -f /etc/hostname ]; then cp /etc/hostname "$work_dir/" || { rm -rf -- "$work_dir"; return 1; }; fi
+    if [ -f /etc/hosts ]; then cp /etc/hosts "$work_dir/" || { rm -rf -- "$work_dir"; return 1; }; fi
+    if [ -d /etc/netplan ]; then cp -R /etc/netplan "$work_dir/" || { rm -rf -- "$work_dir"; return 1; }; fi
+    if ! tar -czf "$BACKUP_DIR/system-config.tar.gz" -C "$work_dir" . || ! chmod 600 "$BACKUP_DIR/system-config.tar.gz"; then
+        rm -rf -- "$work_dir"
         fail "系统配置打包失败"
         return 1
     fi
-    rm -rf "$sys_dir"
-    SYSCONFIG_STATUS="ok"
-    ok "系统配置已打包: apt-sources.tar.gz"
+    rm -rf -- "$work_dir"
+    SYSCONFIG_STATUS=ok
 }
 
 backup_directory_tree() {
-    echo "--- 备份目录结构 ---"
-    if [ -d /data ]; then
-        if ! find /data -type d -not -path '*/lost+found' -not -path '*/temp/*' -not -path '*/.cache/*' | sort > "$BACKUP_DIR/directory-tree.txt"; then
-            fail "导出 /data 目录结构失败"
-            return 1
-        fi
-        local dir_count
-        dir_count=$(wc -l < "$BACKUP_DIR/directory-tree.txt")
-        ok "目录结构已导出: $dir_count 个目录"
-    else
-        echo "  [SKIP] /data 不存在"
-        touch "$BACKUP_DIR/directory-tree.txt"
+    DIRTREE_STATUS=warn
+    if ! find "$INSTALL_BASE" \
+        \( -path "$BACKUP_BASE" -o -path '*/lost+found' -o -path '*/temp' -o -path '*/.cache' \) -prune -o \
+        -type d -print | sort > "$BACKUP_DIR/directory-tree.txt" || \
+        ! chmod 600 "$BACKUP_DIR/directory-tree.txt"; then
+        fail "目录结构导出失败"
+        return 1
     fi
-    DIRTREE_STATUS="ok"
+    DIRTREE_STATUS=ok
 }
 
 backup_git_repos() {
-    echo "--- 备份 Git 仓库远程地址 ---"
-    > "$BACKUP_DIR/git-repos.txt"
-    if [ -d "$HOME/Code" ]; then
-        local gitdir repo_dir remote_url rel_path repo_count
-        while IFS= read -r -d '' gitdir; do
-            repo_dir="$(dirname "$gitdir")"
-            remote_url=$(git -C "$repo_dir" remote get-url origin 2>/dev/null || true)
-            if [ -n "$remote_url" ]; then
-                rel_path="${repo_dir#$HOME/}"
-                echo "[$rel_path] $remote_url" >> "$BACKUP_DIR/git-repos.txt"
-            fi
-        done < <(find "$HOME/Code" -name ".git" -type d -prune -print0 2>/dev/null)
-        repo_count=$(wc -l < "$BACKUP_DIR/git-repos.txt")
-        ok "Git 仓库地址已导出: $repo_count 个仓库"
-    else
-        echo "  [SKIP] ~/Code 不存在"
-    fi
-    GITREPOS_STATUS="ok"
-}
-
-write_manifests() {
-    echo "--- 生成 MANIFEST ---"
-    local host os user created
-    host=$(hostname 2>/dev/null || echo "unknown")
-    os=$(lsb_release -ds 2>/dev/null || grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "unknown")
-    user=$(whoami)
-    created=$(date -Iseconds)
-
-    {
-        echo "backup_timestamp: $TIMESTAMP"
-        echo "created_at: $created"
-        echo "hostname: $host"
-        echo "os: $os"
-        echo "user: $user"
-        echo "dotfiles: dotfiles.tar.gz ($DOTFILES_STATUS)"
-        echo "packages_file: packages.txt ($PACKAGES_STATUS)"
-        echo "system_config: apt-sources.tar.gz ($SYSCONFIG_STATUS)"
-        echo "directory_tree: directory-tree.txt ($DIRTREE_STATUS)"
-        echo "git_repos: git-repos.txt ($GITREPOS_STATUS)"
-    } > "$BACKUP_DIR/MANIFEST.txt"
-
-    cat > "$BACKUP_DIR/manifest.json" << JSONEOF
-{
-  "schema_version": 1,
-  "created_at": "$(json_escape "$created")",
-  "host": "$(json_escape "$host")",
-  "user": "$(json_escape "$user")",
-  "os": "$(json_escape "$os")",
-  "modules": {
-    "dotfiles": {"status": "$DOTFILES_STATUS", "path": "dotfiles.tar.gz"},
-    "packages": {"status": "$PACKAGES_STATUS", "path": "packages.txt"},
-    "sysconfig": {"status": "$SYSCONFIG_STATUS", "path": "apt-sources.tar.gz"},
-    "directory_tree": {"status": "$DIRTREE_STATUS", "path": "directory-tree.txt"},
-    "git_repos": {"status": "$GITREPOS_STATUS", "path": "git-repos.txt"}
-  }
-}
-JSONEOF
-    ok "MANIFEST.txt 和 manifest.json 已生成"
-}
-
-update_latest_link() {
-    if ! ln -sfn "$BACKUP_DIR" "$BACKUP_BASE/latest"; then
-        fail "更新 latest 符号链接失败"
+    GITREPOS_STATUS=warn
+    if ! "$PYTHON_BIN" "$BACKUP_SCRIPT_DIR/manifest.py" repos-create "$HOME/Code" "$BACKUP_DIR/git-repos.json"; then
+        fail "Git 仓库列表导出失败"
         return 1
     fi
-    ok "符号链接已更新: latest → $BACKUP_DIR"
+    GITREPOS_STATUS=ok
 }
 
-for arg in "$@"; do
-    case "$arg" in
-        --help) show_help; exit 0 ;;
-        *) warn "未知参数: $arg"; exit 1 ;;
+module_path() {
+    local status="$1" path="$2"
+    if [ "$status" = ok ]; then
+        printf '%s' "$path"
+    else
+        printf '-'
+    fi
+}
+
+backup_write_manifest() {
+    local overall=complete created host os_name
+    if stage_has_warnings; then overall=complete_with_warnings; fi
+    created=$(date -Iseconds)
+    host=$(hostname)
+    os_name=$(grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d= -f2- | tr -d '"')
+    os_name="${os_name:-unknown}"
+
+    if ! "$PYTHON_BIN" "$BACKUP_SCRIPT_DIR/manifest.py" create \
+        --backup-dir "$BACKUP_DIR" --created-at "$created" --host "$host" --user "$(whoami)" \
+        --os "$os_name" --install-base "$INSTALL_BASE" --overall-status "$overall" \
+        --module dotfiles required "$DOTFILES_STATUS" "$(module_path "$DOTFILES_STATUS" dotfiles.tar.gz)" sensitive \
+        --module packages optional "$PACKAGES_STATUS" "$(module_path "$PACKAGES_STATUS" packages.txt)" normal \
+        --module sysconfig optional "$SYSCONFIG_STATUS" "$(module_path "$SYSCONFIG_STATUS" system-config.tar.gz)" sensitive \
+        --module directory_tree optional "$DIRTREE_STATUS" "$(module_path "$DIRTREE_STATUS" directory-tree.txt)" normal \
+        --module git_repos optional "$GITREPOS_STATUS" "$(module_path "$GITREPOS_STATUS" git-repos.json)" normal; then
+        fail "manifest v2 生成失败"
+        return 1
+    fi
+
+    if ! {
+        echo "schema_version: 2"
+        echo "created_at: $created"
+        echo "overall_status: $overall"
+        echo "install_base: $INSTALL_BASE"
+        echo "dotfiles: $DOTFILES_STATUS"
+        echo "packages: $PACKAGES_STATUS"
+        echo "sysconfig: $SYSCONFIG_STATUS"
+        echo "directory_tree: $DIRTREE_STATUS"
+        echo "git_repos: $GITREPOS_STATUS"
+    } > "$BACKUP_DIR/MANIFEST.txt" || ! chmod 600 "$BACKUP_DIR/MANIFEST.txt"; then
+        fail "MANIFEST.txt 生成失败"
+        return 1
+    fi
+    "$PYTHON_BIN" "$BACKUP_SCRIPT_DIR/manifest.py" validate "$BACKUP_DIR" >/dev/null
+}
+
+backup_publish() {
+    local latest_temp="$BACKUP_BASE/.latest.$$"
+    if ! mv "$BACKUP_DIR" "$FINAL_DIR"; then
+        fail "备份发布失败"
+        return 1
+    fi
+    BACKUP_DIR=""
+    if ! ln -s "$FINAL_DIR" "$latest_temp" || ! mv -Tf "$latest_temp" "$BACKUP_BASE/latest"; then
+        rm -f -- "$latest_temp"
+        fail "latest 原子更新失败"
+        return 1
+    fi
+    ok "latest → $FINAL_DIR"
+}
+
+backup_cleanup_staging() {
+    case "$BACKUP_DIR" in
+        "$BACKUP_BASE"/.staging-*)
+            if [ -d "$BACKUP_DIR" ]; then rm -rf -- "$BACKUP_DIR"; fi
+            ;;
     esac
-done
+}
 
-echo ""
-echo "################################################"
-echo "#  envbat 备份工具                             #"
-echo "#  → $BACKUP_BASE"
-echo "################################################"
-echo ""
+backup_stop_on_signal() {
+    trap - INT TERM
+    exit 130
+}
 
-stage_required "create backup directory" create_backup_dir || { stage_summary; exit 1; }
-stage_optional "dotfiles" backup_dotfiles
-stage_optional "packages" backup_packages
-stage_optional "system config" backup_sysconfig
-stage_optional "directory tree" backup_directory_tree
-stage_optional "git repos" backup_git_repos
-stage_required "manifest" write_manifests || { stage_summary; exit 1; }
-stage_required "latest symlink" update_latest_link || { stage_summary; exit 1; }
+backup_main() {
+    umask 077
+    STAGE_NAMES=(); STAGE_STATUSES=(); STAGE_REQUIRED=(); STAGE_MESSAGES=()
+    DOTFILES_STATUS=fail; PACKAGES_STATUS=skip; SYSCONFIG_STATUS=skip; DIRTREE_STATUS=skip; GITREPOS_STATUS=skip
 
-stage_summary
+    local timestamp
+    timestamp="${ENVBAT_TIMESTAMP:-$(date +%Y-%m-%dT%H%M%S%z)}"
+    FINAL_DIR="$BACKUP_BASE/$timestamp"
+    BACKUP_DIR="$BACKUP_BASE/.staging-$timestamp-$$"
 
-total_size=$(du -sh "$BACKUP_DIR" 2>/dev/null | cut -f1)
-echo ""
-echo "========================================"
-echo " ✅ 备份完成"
-echo ""
-echo "  位置:      $BACKUP_DIR"
-echo "  大小:      ${total_size:-unknown}"
-echo "  时间:      $(date '+%Y-%m-%d %H:%M:%S')"
-echo "========================================"
+    if ! stage_required "backup profile" backup_load_profile; then stage_finish "backup" || true; return 1; fi
+    if ! stage_required "prepare staging" backup_prepare_staging; then stage_finish "backup" || true; [ -z "$BACKUP_DIR" ] || rm -rf -- "$BACKUP_DIR"; return 1; fi
+    if ! stage_required "dotfiles" backup_dotfiles; then stage_finish "backup" || true; rm -rf -- "$BACKUP_DIR"; return 1; fi
+
+    if command -v dpkg &>/dev/null; then stage_optional "packages" backup_packages; else PACKAGES_STATUS=skip; stage_skip "packages" "dpkg unavailable"; fi
+    stage_optional "system config" backup_sysconfig
+    if [ -d "$INSTALL_BASE" ]; then stage_optional "directory tree" backup_directory_tree; else DIRTREE_STATUS=skip; stage_skip "directory tree" "install base missing"; fi
+    if [ -d "$HOME/Code" ]; then stage_optional "git repos" backup_git_repos; else GITREPOS_STATUS=skip; stage_skip "git repos" "~/Code missing"; fi
+
+    if ! stage_required "manifest v2" backup_write_manifest; then stage_finish "backup" || true; rm -rf -- "$BACKUP_DIR"; return 1; fi
+    if ! stage_required "publish latest" backup_publish; then stage_finish "backup" || true; [ -z "$BACKUP_DIR" ] || rm -rf -- "$BACKUP_DIR"; return 1; fi
+    stage_finish "backup"
+    echo "  位置: $FINAL_DIR"
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    trap backup_cleanup_staging EXIT
+    trap backup_stop_on_signal INT TERM
+    case "${1:-}" in
+        "") backup_main ;;
+        --help|-h) show_help ;;
+        *) warn "未知参数: $1"; exit 1 ;;
+    esac
+fi

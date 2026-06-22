@@ -8,6 +8,17 @@ popos_check_system() {
     echo "========================================"
 
     # OS info
+    local os_id="" os_like=""
+    if [ -f /etc/os-release ]; then
+        # shellcheck source=/dev/null
+        source /etc/os-release
+        os_id="${ID:-}"
+        os_like="${ID_LIKE:-}"
+    fi
+    if [ "$os_id" != pop ] && [ "$os_id" != ubuntu ] && [[ "$os_like" != *ubuntu* ]]; then
+        fail "仅支持 Pop!_OS/Ubuntu，当前系统: ${os_id:-unknown}"
+        return 1
+    fi
     if command -v lsb_release &>/dev/null; then
         local os_name
         os_name="$(lsb_release -ds 2>/dev/null)"
@@ -44,5 +55,12 @@ popos_check_system() {
     else
         echo "  [WARN] 网络可能不通"
     fi
+    local cmd
+    for cmd in sudo apt-get python3; do
+        if ! command -v "$cmd" &>/dev/null; then
+            fail "缺少必需命令: $cmd"
+            return 1
+        fi
+    done
     echo ""
 }

@@ -1,247 +1,147 @@
 #!/usr/bin/env bash
-# === PopOS: Verify Setup ===
-# Source this from setup-popos.sh only.
+# === PopOS setup verification ===
 
-popos_verify() {
-    echo "========================================"
-    echo " [5/5] 验证配置"
-    echo "========================================"
+_popos_verify_required_file() {
+    local label="$1" path="$2"
+    if [ -e "$path" ]; then
+        echo "  [OK]   $label"
+        return 0
+    fi
+    echo "  [FAIL] $label: $path"
+    return 1
+}
 
-    # --- Directory structure ---
-    if [ ! -d "/data" ]; then
-        echo "  [SKIP] /data 目录不存在，跳过目录结构验证"
-        echo ""
+_popos_verify_shell_loader() {
+    local rc_file="$1"
+    if [ -f "$rc_file" ] && \
+        grep -Fq '# === envbat profile ===' "$rc_file" && \
+        grep -Fq "[ -f \"\$HOME/.config/envbat/profile.sh\" ] && source \"\$HOME/.config/envbat/profile.sh\"" "$rc_file"; then
+        echo "  [OK]   $rc_file 加载 envbat profile"
+        return 0
+    fi
+    echo "  [FAIL] $rc_file 缺少 envbat profile 加载块"
+    return 1
+}
+
+_popos_verify_optional_command() {
+    local label="$1" command_name="$2"
+    if command -v "$command_name" >/dev/null 2>&1; then
+        echo "  [OK]   $label"
     else
-        echo ">>> /data 目录结构:"
-        local top_dirs
-        top_dirs="$(find /data -maxdepth 1 -type d 2>/dev/null | wc -l)"
-        local all_dirs
-        all_dirs="$(find /data -type d 2>/dev/null | wc -l)"
-        echo "  顶层目录: $top_dirs | 总计目录: $all_dirs"
-        echo ""
-    fi
-
-    # --- Symlinks ---
-    echo ">>> 符号链接:"
-    local symlinks_ok=0 symlinks_miss=0
-    for name in Code Projects Data Tools Experiments Datasets Models Library Shared Backups; do
-        local path="$HOME/$name"
-        if [ -L "$path" ]; then
-            local target
-            target="$(readlink "$path")"
-            echo "  [OK]  ~/$name → $target"
-            symlinks_ok=$((symlinks_ok + 1))
-        else
-            echo "  [MISS] ~/$name"
-            symlinks_miss=$((symlinks_miss + 1))
-        fi
-    done
-    echo "  $symlinks_ok OK, $symlinks_miss missing"
-    echo ""
-
-    # --- Profile ---
-    echo ">>> 配置文件:"
-    if [ -f "$HOME/.config/envbat/profile.sh" ]; then
-        echo "  [OK]  配置文件存在: ~/.config/envbat/profile.sh"
-    else
-        echo "  [MISS] 配置文件不存在"
-    fi
-    echo ""
-
-    # --- Env vars ---
-    echo ">>> 环境变量:"
-    for var in DATA_HOME CODE_HOME TOOLS_HOME HF_HOME CARGO_HOME TMPDIR; do
-        if [ -n "${!var:-}" ]; then
-            echo "  [OK]  $var=${!var}"
-        else
-            echo "  [MISS] $var (未设置)"
-        fi
-    done
-    echo ""
-
-    # --- Installed tools ---
-    echo ">>> 必需基础工具:"
-    local required_tools=(git curl wget gcc make unzip tar zsh)
-    local tools_ok=0 tools_miss=0
-    for cmd in "${required_tools[@]}"; do
-        if command -v "$cmd" &>/dev/null; then
-            echo "  [OK]  $cmd"
-            tools_ok=$((tools_ok + 1))
-        else
-            echo "  [MISS] $cmd"
-            tools_miss=$((tools_miss + 1))
-        fi
-    done
-    echo "  $tools_ok OK, $tools_miss missing"
-    echo ""
-
-    echo ">>> 可选基础工具:"
-    local optional_tools=(htop neofetch tree rg fdfind fzf zoxide)
-    local opt_ok=0 opt_miss=0
-    for cmd in "${optional_tools[@]}"; do
-        if command -v "$cmd" &>/dev/null; then
-            echo "  [OK]  $cmd"
-            opt_ok=$((opt_ok + 1))
-        else
-            echo "  [MISS] $cmd"
-            opt_miss=$((opt_miss + 1))
-        fi
-    done
-    echo "  $opt_ok OK, $opt_miss missing"
-    echo ""
-
-    # --- Development tools (chosen during setup) ---
-    echo ">>> 开发工具:"
-    local lang_tools=()
-    if [ "${INSTALL_GO:-false}" = true ]; then
-        lang_tools+=(go)
-    fi
-    if [ "${INSTALL_NVM_NODE:-false}" = true ]; then
-        lang_tools+=(node npm)
-    fi
-    if [ "${INSTALL_RUSTUP:-false}" = true ]; then
-        lang_tools+=(rustc cargo)
-    fi
-    if [ "${INSTALL_NEOVIM:-false}" = true ]; then
-        lang_tools+=(nvim)
-    fi
-    if [ "${INSTALL_DOCKER:-false}" = true ]; then
-        lang_tools+=(docker)
-    fi
-    if [ "${INSTALL_JAVA:-skip}" != "skip" ]; then
-        lang_tools+=(java javac)
-    fi
-
-    if [ ${#lang_tools[@]} -eq 0 ]; then
-        echo "  (未选择开发工具)"
-    else
-        local dev_ok=0 dev_miss=0
-        for cmd in "${lang_tools[@]}"; do
-            if command -v "$cmd" &>/dev/null || [ -x "$HOME/Tools/bin/$cmd" ]; then
-                echo "  [OK]  $cmd"
-                dev_ok=$((dev_ok + 1))
-            else
-                echo "  [MISS] $cmd"
-                dev_miss=$((dev_miss + 1))
-            fi
-        done
-        echo "  $dev_ok OK, $dev_miss missing"
-    fi
-    echo ""
-
-    # --- Shell setup ---
-    if [ "${INSTALL_OHMYZSH:-false}" = true ]; then
-        echo ">>> Zsh / oh-my-zsh:"
-        local login_shell
-        login_shell="$(getent passwd "$USER" 2>/dev/null | cut -d: -f7 || true)"
-        if command -v zsh &>/dev/null; then
-            echo "  [OK]  zsh"
-        else
-            echo "  [MISS] zsh"
-        fi
-        if [ -d "$HOME/.oh-my-zsh" ]; then
-            echo "  [OK]  ~/.oh-my-zsh"
-        else
-            echo "  [MISS] ~/.oh-my-zsh"
-        fi
-        if [ "${login_shell##*/}" = "zsh" ]; then
-            echo "  [OK]  默认 shell: $login_shell"
-        else
-            echo "  [MISS] 默认 shell 不是 zsh: ${login_shell:-unknown}"
-        fi
-        echo ""
-    fi
-
-    # --- Chinese input method ---
-    if [ "${INSTALL_CHINESE:-false}" = true ]; then
-        echo ">>> 中文输入法:"
-        if locale -a 2>/dev/null | grep -qi '^zh_CN\.utf8$'; then
-            echo "  [OK]  zh_CN.UTF-8 locale"
-        else
-            echo "  [MISS] zh_CN.UTF-8 locale"
-        fi
-        if command -v fcitx5 &>/dev/null; then
-            echo "  [OK]  fcitx5"
-        else
-            echo "  [MISS] fcitx5"
-        fi
-        if [ -f "$HOME/.xinputrc" ] && grep -q fcitx5 "$HOME/.xinputrc" 2>/dev/null; then
-            echo "  [OK]  im-config: fcitx5"
-        else
-            echo "  [MISS] im-config 未设置为 fcitx5"
-        fi
-        if [ -f "$HOME/.config/autostart/org.fcitx.Fcitx5.desktop" ] || [ -f "$HOME/.config/autostart/fcitx5.desktop" ]; then
-            echo "  [OK]  fcitx5 自启动"
-        else
-            echo "  [MISS] fcitx5 自启动"
-        fi
-        echo ""
-    fi
-
-    if [ "${tools_miss:-0}" -gt 0 ]; then
-        return 1
+        echo "  [WARN] $label 不可用"
     fi
 }
 
-popos_summary() {
-    echo "========================================"
-    echo " 📋 系统状态摘要"
-    echo "========================================"
-
-    # Disk
-    if [ -d /data ]; then
-        local data_used data_total data_pct
-        data_used=$(df -h /data 2>/dev/null | awk 'NR==2{print $3}')
-        data_total=$(df -h /data 2>/dev/null | awk 'NR==2{print $2}')
-        data_pct=$(df -h /data 2>/dev/null | awk 'NR==2{print $5}')
-        echo "  /data:    ${data_used} / ${data_total} (${data_pct})"
+_popos_verify_optional_path() {
+    local label="$1" path="$2"
+    if [ -e "$path" ]; then
+        echo "  [OK]   $label"
+    else
+        echo "  [WARN] $label marker 缺失: $path"
     fi
-    local root_used root_total root_pct
-    root_used=$(df -h / 2>/dev/null | awk 'NR==2{print $3}')
-    root_total=$(df -h / 2>/dev/null | awk 'NR==2{print $2}')
-    root_pct=$(df -h / 2>/dev/null | awk 'NR==2{print $5}')
-    echo "  系统盘:   ${root_used} / ${root_total} (${root_pct})"
+}
 
-    # Memory
-    local mem_total mem_used
-    mem_total=$(free -h 2>/dev/null | awk 'NR==2{print $2}')
-    mem_used=$(free -h 2>/dev/null | awk 'NR==2{print $3}')
-    echo "  内存:     ${mem_used} / ${mem_total}"
+popos_verify() {
+    local failures=0 path command_name
+    local profile="$HOME/.config/envbat/profile.sh"
+    local base="${INSTALL_BASE:-/data}"
 
-    # Uptime
-    local uptime_str
-    uptime_str=$(uptime -p 2>/dev/null | sed 's/up //')
-    echo "  运行时间: ${uptime_str}"
+    echo "========================================"
+    echo " [5/5] 验证配置"
+    echo "========================================"
+    echo ">>> Required invariants"
 
-    # Shell
-    echo "  默认 Shell: $SHELL"
-
-    # Security
-    echo "  防火墙: $(sudo ufw status 2>/dev/null | head -1 || echo '未安装')"
-    echo "  Fail2ban: $(systemctl is-active fail2ban 2>/dev/null || echo '未安装')"
-
-    # Profile
-    if [ -f "$HOME/.config/envbat/profile.sh" ]; then
-        echo "  配置文件: ✅ 已保存"
+    if [ -f "$profile" ] && grep -Eq '^ENVBAT_PROFILE_SCHEMA=2$' "$profile"; then
+        echo "  [OK]   profile schema v2"
+    else
+        echo "  [FAIL] profile 缺失或不是 schema v2"
+        failures=$((failures + 1))
     fi
 
-    # Symlink check
-    local sym_ok=0 sym_total=0
-    for name in Code Projects Data Tools; do
-        [ -L "$HOME/$name" ] && sym_ok=$((sym_ok + 1))
-        sym_total=$((sym_total + 1))
-    done
-    echo "  符号链接: ${sym_ok}/${sym_total} 有效"
-
-    # Env vars (from profile)
-    echo ""
-    echo "--- 环境变量 ---"
-    for var in DATA_HOME CODE_HOME TOOLS_HOME HF_HOME CARGO_HOME TMPDIR; do
-        if [ -n "${!var:-}" ]; then
-            echo "  [OK]  $var=${!var}"
-        else
-            echo "  [MISS] $var"
+    for path in "$base" "$base/workspace/github" "$base/tools/bin" "$base/temp"; do
+        if ! _popos_verify_required_file "核心目录" "$path"; then
+            failures=$((failures + 1))
         fi
     done
+
+    if ! _popos_verify_shell_loader "$HOME/.bashrc"; then failures=$((failures + 1)); fi
+    if ! _popos_verify_shell_loader "$HOME/.zshrc"; then failures=$((failures + 1)); fi
+
+    for command_name in git curl wget gcc make unzip tar python3 zsh; do
+        if command -v "$command_name" >/dev/null 2>&1; then
+            echo "  [OK]   $command_name"
+        else
+            echo "  [FAIL] 必需命令缺失: $command_name"
+            failures=$((failures + 1))
+        fi
+    done
+
     echo ""
+    echo ">>> Optional selections"
+    if [ "${INSTALL_EXTRA_TOOLS:-false}" = true ]; then
+        for command_name in rg fdfind fzf zoxide; do
+            _popos_verify_optional_command "$command_name" "$command_name"
+        done
+    else
+        echo "  [SKIP] extra tools disabled"
+    fi
+
+    if [ "${INSTALL_OHMYZSH:-false}" = true ]; then
+        _popos_verify_optional_path "oh-my-zsh" "$HOME/.oh-my-zsh/oh-my-zsh.sh"
+        _popos_verify_optional_path "Powerlevel10k" "$HOME/.oh-my-zsh/custom/themes/powerlevel10k/powerlevel10k.zsh-theme"
+        _popos_verify_optional_path "zsh-autosuggestions" "$HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+        _popos_verify_optional_path "zsh-syntax-highlighting" "$HOME/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+    else
+        echo "  [SKIP] oh-my-zsh disabled"
+    fi
+
+    if [ "${INSTALL_GO:-false}" = true ]; then _popos_verify_optional_command "Go" go; fi
+    if [ "${INSTALL_NVM_NODE:-false}" = true ]; then _popos_verify_optional_path "nvm" "$base/tools/nvm/nvm.sh"; fi
+    if [ "${INSTALL_PYENV:-false}" = true ]; then _popos_verify_optional_path "pyenv" "$base/tools/pyenv/bin/pyenv"; fi
+    if [ "${INSTALL_RUSTUP:-false}" = true ]; then _popos_verify_optional_path "rustc" "$base/tools/cargo/bin/rustc"; fi
+    if [ "${INSTALL_NEOVIM:-false}" = true ]; then _popos_verify_optional_command "Neovim" nvim; fi
+    if [ "${INSTALL_DOCKER:-false}" = true ]; then _popos_verify_optional_command "Docker" docker; fi
+    if [ "${INSTALL_JAVA:-skip}" != skip ]; then _popos_verify_optional_command "Java" java; fi
+
+    if [ "${INSTALL_CHINESE:-false}" = true ]; then
+        _popos_verify_optional_command "fcitx5" fcitx5
+        _popos_verify_optional_path "fcitx5 autostart" "$HOME/.config/autostart/org.fcitx.Fcitx5.desktop"
+        if [ -f "$HOME/.xinputrc" ] && grep -Fq fcitx5 "$HOME/.xinputrc"; then
+            echo "  [OK]   im-config 使用 fcitx5"
+        else
+            echo "  [WARN] im-config marker 缺失"
+        fi
+    else
+        echo "  [SKIP] Chinese input disabled"
+    fi
+
+    echo ""
+    echo "  required failures: $failures"
+    [ "$failures" -eq 0 ]
+}
+
+popos_summary() {
+    local base="${INSTALL_BASE:-/data}" sym_ok=0 name
+    echo "========================================"
+    echo " 系统状态摘要"
+    echo "========================================"
+    if [ -d "$base" ]; then
+        df -h "$base" 2>/dev/null | awk 'NR==2 {printf "  安装盘: %s / %s (%s)\n", $3, $2, $5}' || true
+    fi
+    df -h / 2>/dev/null | awk 'NR==2 {printf "  系统盘: %s / %s (%s)\n", $3, $2, $5}' || true
+    free -h 2>/dev/null | awk 'NR==2 {printf "  内存:   %s / %s\n", $3, $2}' || true
+    echo "  Shell: ${SHELL:-unknown}"
+
+    for name in Code Projects Data Tools; do
+        if [ -L "$HOME/$name" ]; then sym_ok=$((sym_ok + 1)); fi
+    done
+    echo "  符号链接: $sym_ok/4"
+    if command -v ufw >/dev/null 2>&1; then
+        echo "  防火墙: $(sudo ufw status 2>/dev/null | head -1 || echo unknown)"
+    else
+        echo "  防火墙: not installed"
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+        echo "  Fail2ban: $(systemctl is-active fail2ban 2>/dev/null || echo inactive)"
+    fi
 }

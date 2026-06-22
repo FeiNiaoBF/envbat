@@ -28,12 +28,19 @@ info() { echo -e "  ${CYAN}$1${NC}"; }
 
 # ---- helpers ----
 seconds_to_display() {
-    local s=$1
-    if [[ "$s" == "0" || "$s" == "uint32 0" ]]; then
+    local raw="$1" s
+    if [[ "$raw" =~ ([0-9]+)$ ]]; then
+        s="${BASH_REMATCH[1]}"
+    else
+        echo "未知"
+        return 0
+    fi
+    if [ "$s" -eq 0 ]; then
         echo "从不"
     else
-        local m=$(( s / 60 ))
-        local r=$(( s % 60 ))
+        local m r
+        m=$((s / 60))
+        r=$((s % 60))
         if [[ $m -gt 0 && $r -gt 0 ]]; then
             echo "${m}分${r}秒"
         elif [[ $m -gt 0 ]]; then
@@ -49,7 +56,12 @@ gget() {
 }
 
 gset() {
-    gsettings set "$1" "$2" "$3" 2>/dev/null && ok "$4" || warn "$5"
+    if gsettings set "$1" "$2" "$3" 2>/dev/null; then
+        [ -n "$4" ] && ok "$4"
+        return 0
+    fi
+    [ -n "$5" ] && warn "$5"
+    return 1
 }
 
 read_minutes() {
@@ -69,6 +81,11 @@ read_minutes() {
 # ===== 主函数 =====
 popos_power_settings() {
     echo ""
+
+    if ! command -v gsettings >/dev/null 2>&1; then
+        warn "gsettings 不可用"
+        return 1
+    fi
     echo "========================================"
     echo " PopOS 电源管理 — 交互设置"
     echo "========================================"
@@ -76,17 +93,14 @@ popos_power_settings() {
 
     # ---- 1. 显示当前设置 ----
     echo "--- 当前设置 ---"
-    local idle_raw lock_raw dim_raw
+    local idle_raw lock_raw
     idle_raw=$(gget org.gnome.desktop.session idle-delay)
     lock_raw=$(gget org.gnome.desktop.screensaver lock-delay)
-    dim_raw=$(gget org.gnome.settings-daemon.plugins.power idle-dim)
 
     # 提取数值
     local idle_sec=0 lock_sec=0
-    idle_sec=$(echo "$idle_raw" | grep -oP '\d+' | head -1)
-    lock_sec=$(echo "$lock_raw" | grep -oP '\d+' | head -1)
-    idle_sec=${idle_sec:-0}
-    lock_sec=${lock_sec:-0}
+    if [[ "$idle_raw" =~ ([0-9]+)$ ]]; then idle_sec="${BASH_REMATCH[1]}"; fi
+    if [[ "$lock_raw" =~ ([0-9]+)$ ]]; then lock_sec="${BASH_REMATCH[1]}"; fi
 
     echo "  空闲延时:    $(seconds_to_display "$idle_raw") (idle-delay)"
     echo "  锁屏延时:    $(seconds_to_display "$lock_raw") (lock-delay)"
@@ -115,40 +129,42 @@ popos_power_settings() {
     # ---- 4. 应用设置 ----
     echo "--- 应用设置 ---"
 
-    local idle_sec_new=$(( idle_min * 60 ))
-    local lock_sec_new=$(( lock_min * 60 ))
+    local idle_sec_new lock_sec_new
+    idle_sec_new=$((idle_min * 60))
+    lock_sec_new=$((lock_min * 60))
+    local failures=0
 
     # 空闲延时
     if [[ "$idle_min" == "0" ]]; then
-        gset org.gnome.desktop.session idle-delay 0 \
+        if ! gset org.gnome.desktop.session idle-delay 0 \
             "空闲延时已设为 从不 (屏幕常亮)" \
-            "空闲延时设置失败"
+            "空闲延时设置失败"; then failures=$((failures + 1)); fi
         # 同时关闭空闲 dim
-        gset org.gnome.settings-daemon.plugins.power idle-dim false \
-            "" ""
+        if ! gset org.gnome.settings-daemon.plugins.power idle-dim false \
+            "" "idle-dim 设置失败"; then failures=$((failures + 1)); fi
     else
-        gset org.gnome.desktop.session idle-delay "$idle_sec_new" \
+        if ! gset org.gnome.desktop.session idle-delay "$idle_sec_new" \
             "空闲延时已设为 ${idle_min} 分钟" \
-            "空闲延时设置失败"
-        gset org.gnome.settings-daemon.plugins.power idle-dim true \
-            "" ""
+            "空闲延时设置失败"; then failures=$((failures + 1)); fi
+        if ! gset org.gnome.settings-daemon.plugins.power idle-dim true \
+            "" "idle-dim 设置失败"; then failures=$((failures + 1)); fi
     fi
 
     # 锁屏延时
     if [[ "$lock_min" == "0" ]]; then
-        gset org.gnome.desktop.screensaver lock-delay 0 \
+        if ! gset org.gnome.desktop.screensaver lock-delay 0 \
             "锁屏延时已设为 从不 (黑屏但不锁)" \
-            "锁屏延时设置失败"
+            "锁屏延时设置失败"; then failures=$((failures + 1)); fi
     else
-        gset org.gnome.desktop.screensaver lock-delay "$lock_sec_new" \
+        if ! gset org.gnome.desktop.screensaver lock-delay "$lock_sec_new" \
             "锁屏延时已设为 ${lock_min} 分钟" \
-            "锁屏延时设置失败"
+            "锁屏延时设置失败"; then failures=$((failures + 1)); fi
     fi
 
     # 确保锁屏功能启用
-    gset org.gnome.desktop.screensaver lock-enabled true \
+    if ! gset org.gnome.desktop.screensaver lock-enabled true \
         "锁屏功能已启用" \
-        ""
+        "锁屏功能启用失败"; then failures=$((failures + 1)); fi
 
     echo ""
 
@@ -158,10 +174,10 @@ popos_power_settings() {
     new_idle=$(gget org.gnome.desktop.session idle-delay)
     new_lock=$(gget org.gnome.desktop.screensaver lock-delay)
     local nidle nlock
-    nidle=$(echo "$new_idle" | grep -oP '\d+' | head -1)
-    nlock=$(echo "$new_lock" | grep -oP '\d+' | head -1)
-    nidle=${nidle:-0}
-    nlock=${nlock:-0}
+    nidle=0
+    nlock=0
+    if [[ "$new_idle" =~ ([0-9]+)$ ]]; then nidle="${BASH_REMATCH[1]}"; fi
+    if [[ "$new_lock" =~ ([0-9]+)$ ]]; then nlock="${BASH_REMATCH[1]}"; fi
 
     echo "  空闲延时:  $(seconds_to_display "$new_idle")"
     echo "  锁屏延时:  $(seconds_to_display "$new_lock")"
@@ -171,13 +187,21 @@ popos_power_settings() {
         ok "设置已生效"
     else
         warn "设置可能未完全生效，请检查 gsettings 权限"
+        failures=$((failures + 1))
     fi
     echo ""
     echo "========================================"
-    echo " 完成！如需调整请重新运行本脚本"
+    if [ "$failures" -gt 0 ]; then
+        echo " 设置完成但有 $failures 项失败"
+    else
+        echo " 设置完成"
+    fi
     echo "========================================"
     echo ""
+    [ "$failures" -eq 0 ]
 }
 
 # ===== 入口 =====
-popos_power_settings
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    popos_power_settings
+fi

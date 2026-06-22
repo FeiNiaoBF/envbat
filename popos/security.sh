@@ -16,8 +16,10 @@ popos_install_security() {
                 fail "UFW 安装失败"
                 return 1
             fi
-            sudo ufw default deny incoming
-            sudo ufw allow ssh
+            if ! sudo ufw default deny incoming || ! sudo ufw allow ssh; then
+                fail "UFW 规则配置失败"
+                return 1
+            fi
             if ! sudo ufw --force enable; then
                 fail "UFW 启用失败"
                 return 1
@@ -35,13 +37,17 @@ popos_install_security() {
                 fail "Fail2ban 安装失败"
                 return 1
             fi
-            sudo tee /etc/fail2ban/jail.local >/dev/null <<'EOF'
+            if ! sudo tee /etc/fail2ban/jail.local >/dev/null <<'EOF'
 [DEFAULT]
 bantime = 600
 maxretry = 5
 [sshd]
 enabled = true
 EOF
+            then
+                fail "Fail2ban 配置写入失败"
+                return 1
+            fi
             if ! sudo systemctl enable --now fail2ban; then
                 fail "Fail2ban 启动失败"
                 return 1
