@@ -101,6 +101,7 @@ popos_ask_questions() {
     ask_bool "安装 Node.js (via nvm)?" INSTALL_NVM_NODE
     ask_bool "安装 Python (via pyenv)?" INSTALL_PYENV
     ask_bool "安装 Rust (via rustup)?" INSTALL_RUSTUP
+    ask_bool "安装 uv (Python 包管理器)?" INSTALL_UV
     ask_select "Java 版本?" INSTALL_JAVA "skip" "11" "17" "21"
 
     title "编辑器与工具"
@@ -134,7 +135,7 @@ popos_print_selection_summary() {
     echo " 配置摘要"
     echo "========================================"
     printf "  安装目录: %s\n" "$INSTALL_BASE"
-    printf "  Go/Node/Python/Rust/Java: %s/%s/%s/%s/%s\n" "$INSTALL_GO" "$INSTALL_NVM_NODE" "$INSTALL_PYENV" "$INSTALL_RUSTUP" "$INSTALL_JAVA"
+    printf "  Go/Node/Python/Rust/uv/Java: %s/%s/%s/%s/%s/%s\n" "$INSTALL_GO" "$INSTALL_NVM_NODE" "$INSTALL_PYENV" "$INSTALL_RUSTUP" "$INSTALL_UV" "$INSTALL_JAVA"
     printf "  Neovim/Docker/Zsh: %s/%s/%s\n" "$INSTALL_NEOVIM" "$INSTALL_DOCKER" "$INSTALL_OHMYZSH"
     printf "  Security/Chinese/Chrome: %s/%s/%s\n" "$INSTALL_UFW,$INSTALL_FAIL2BAN,$INSTALL_AUTO_UPDATES" "$INSTALL_CHINESE" "$INSTALL_CHROME"
     printf "  SSH: %s\n" "$INSTALL_SSH"
@@ -218,6 +219,7 @@ if [ "$INSTALL_GO" = true ]; then stage_optional "go" popos_install_go; else sta
 if [ "$INSTALL_NVM_NODE" = true ]; then stage_optional "node nvm" popos_install_nvm_node; else stage_skip "node nvm" "user disabled"; fi
 if [ "$INSTALL_PYENV" = true ]; then stage_optional "pyenv" popos_install_pyenv; else stage_skip "pyenv" "user disabled"; fi
 if [ "$INSTALL_RUSTUP" = true ]; then stage_optional "rustup" popos_install_rustup; else stage_skip "rustup" "user disabled"; fi
+if [ "$INSTALL_UV" = true ]; then stage_optional "uv" popos_install_uv; else stage_skip "uv" "user disabled"; fi
 if [ "$INSTALL_JAVA" != skip ]; then stage_optional "java" popos_install_java; else stage_skip "java" "user disabled"; fi
 
 if [ "$INSTALL_UFW" = true ] || [ "$INSTALL_FAIL2BAN" = true ] || [ "$INSTALL_AUTO_UPDATES" = true ]; then stage_optional "security" popos_install_security; else stage_skip "security" "user disabled"; fi

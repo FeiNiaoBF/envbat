@@ -160,3 +160,27 @@ popos_install_java() {
         return 1
     fi
 }
+
+popos_install_uv() {
+    echo ">>> 安装 uv (Python 包管理器) <<<"
+    if command -v uv &>/dev/null; then
+        echo "  [SKIP] uv 已安装: $(uv --version 2>/dev/null)"
+        return 0
+    fi
+    if ! curl -LsSf https://astral.sh/uv/install.sh | sh; then
+        fail "uv 安装失败"
+        return 1
+    fi
+    # 确保 PATH 能找到 uv
+    if [ -f "$HOME/.local/bin/uv" ]; then
+        export PATH="$HOME/.local/bin:$PATH"
+        if ! mkdir -p "$HOME/Tools/bin" || ! ln -sf "$HOME/.local/bin/uv" "$HOME/Tools/bin/uv"; then
+            warn "uv 命令链接创建失败（非致命）"
+        fi
+    fi
+    if command -v uv &>/dev/null; then
+        ok "uv 已安装: $(uv --version 2>/dev/null)"
+    else
+        warn "uv 已安装但不在当前 PATH 中，登出再登入后生效"
+    fi
+}
