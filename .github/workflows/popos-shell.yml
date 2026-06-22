@@ -1,0 +1,25 @@
+name: PopOS shell checks
+
+on:
+  push:
+    paths:
+      - "popos/**"
+      - ".github/workflows/popos-shell.yml"
+  pull_request:
+    paths:
+      - "popos/**"
+      - ".github/workflows/popos-shell.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Check Bash syntax
+        run: for file in popos/*.sh popos/tests/*.sh; do bash -n "$file"; done
+      - name: Run ShellCheck
+        run: shellcheck -x popos/*.sh popos/tests/*.sh
+      - name: Run tests
+        run: for test in popos/tests/*_test.sh; do bash "$test"; done

@@ -15,7 +15,7 @@ envbat/
 │   ├── config.ps1        # 配置 PATH / JAVA_HOME
 │   └── verify.ps1        # 验证安装结果
 └── popos/                # Pop!_OS 环境配置
-    ├── setup.sh           # ── 入口：阶段化容错初始化 / --repair 修复
+    ├── setup.sh           # ── 入口：初始化 / repair / reconfigure
     ├── runner.sh          # 阶段执行器：OK/SKIP/WARN/FAIL 汇总
     ├── check.sh           # 检测系统环境
     ├── directories.sh     # 创建目录结构 + 符号链接
@@ -26,11 +26,10 @@ envbat/
     ├── security.sh        # UFW / Fail2ban / 自动安全更新
     ├── locale.sh          # 中文 locale / fcitx5 输入法
     ├── docker.sh          # Docker 官方源与插件
-    ├── backup.sh          # Linux 用户态 + 系统配置备份
-    ├── restore.sh         # Linux 用户态安全恢复
+    ├── backup.sh          # staging 校验后原子发布备份
+    ├── restore.sh         # manifest v2 校验后的安全恢复
+    ├── manifest.py        # manifest、校验和与路径验证
     ├── verify.sh          # 验证配置结果
-    ├── mirror.sh          # [工具] 镜像源切换（自动识别国内/海外）
-    ├── utils.sh           # [工具] 实用函数集（智能安装/更新/systemctl/暂停）
     └── popos-power.sh     # [独立] 交互式电源管理（空闲/锁屏延时）
 ```
 
@@ -52,6 +51,9 @@ chmod +x popos/setup.sh
 # 修复/补装模式：复用 ~/.config/envbat/profile.sh，不重新问答
 ./popos/setup.sh --repair
 
+# 重新配置：以当前选择为默认值，确认后保存并执行
+./popos/setup.sh --reconfigure
+
 # 电源管理（独立工具，不需 root）
 chmod +x popos/popos-power.sh
 ./popos/popos-power.sh
@@ -59,7 +61,7 @@ chmod +x popos/popos-power.sh
 
 ### Backup & Restore (PopOS)
 
-Backup your configuration, package list, and system settings:
+备份用户配置、包列表和系统设置：
 
 ```bash
 # 备份
@@ -72,7 +74,7 @@ Backup your configuration, package list, and system settings:
 # 恢复最新备份（默认恢复用户态内容）
 ./popos/restore.sh
 
-# 恢复最新备份（逐项确认）
+# 高级恢复模式（额外提供系统配置和 apt 包恢复选项）
 ./popos/restore.sh -i
 
 # 恢复指定备份
@@ -87,12 +89,24 @@ Restore 默认策略：
 - 不默认执行完整 apt 包列表恢复
 - 结束时询问是否运行 `./popos/setup.sh --repair`
 
+备份与恢复契约：
+
+- profile 使用 `ENVBAT_PROFILE_SCHEMA=2`；旧 profile 自动备份并保守迁移，新增选项默认关闭
+- 备份先写入权限为 `700` 的 staging 目录，归档和 manifest 权限为 `600`
+- dotfiles 和 manifest 成功并通过 SHA-256 校验后，才更新 `latest`
+- `manifest.json` 当前 schema 为 v2；restore 明确拒绝 v1、缺失文件和校验和损坏
+- 恢复写入前创建安全快照；dotfiles、Neovim、oh-my-zsh custom 和 SSH 使用临时目标替换
+- Git 只 clone 不存在的仓库，不 pull 或覆盖已有路径
+- netplan 仅备份供人工检查，不自动恢复
+
 阶段状态含义：
 
 - `OK`：阶段成功
 - `SKIP`：用户禁用、备份缺失或不适用
 - `WARN`：可选阶段失败，流程继续
 - `FAIL`：必需阶段失败，流程停止
+
+仅有 `WARN` 时进程退出码仍为 `0`，最终标题显示 `COMPLETED WITH WARNINGS`；存在 required `FAIL` 时退出码为 `1`。
 
 Windows backup/restore 将在后续阶段补齐；当前 Windows 只覆盖轻量开发环境初始化。
 
