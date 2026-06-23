@@ -16,8 +16,9 @@ HOME="$test_root/home"
 BACKUP_BASE="$test_root/backups"
 INSTALL_BASE="$test_root/data"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-mkdir -p "$HOME/.ssh" "$INSTALL_BASE"
+mkdir -p "$HOME/.config/mise" "$HOME/.ssh" "$INSTALL_BASE"
 printf 'shell config\n' > "$HOME/.zshrc"
+printf '[tools]\nnode = "lts"\n' > "$HOME/.config/mise/config.toml"
 printf 'private key\n' > "$HOME/.ssh/id_ed25519"
 chmod 600 "$HOME/.ssh/id_ed25519"
 
@@ -30,6 +31,7 @@ ENVBAT_TIMESTAMP=success backup_main >/dev/null
 
 [ "$(stat -c %a "$BACKUP_BASE/success")" = 700 ] || fail_test "backup directory mode is not 700"
 [ "$(stat -c %a "$BACKUP_BASE/success/dotfiles.tar.gz")" = 600 ] || fail_test "dotfiles archive mode is not 600"
+tar -tzf "$BACKUP_BASE/success/dotfiles.tar.gz" | grep -q './mise/config.toml' || fail_test "mise config missing from archive"
 "$PYTHON_BIN" "$SCRIPT_DIR/../manifest.py" validate "$BACKUP_BASE/success" >/dev/null || fail_test "published backup is invalid"
 latest_before=$(sha256sum "$BACKUP_BASE/latest/manifest.json")
 

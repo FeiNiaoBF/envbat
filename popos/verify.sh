@@ -41,6 +41,24 @@ _popos_verify_optional_path() {
     fi
 }
 
+_popos_verify_optional_executable() {
+    local label="$1" path="$2"
+    if [ -x "$path" ]; then
+        echo "  [OK]   $label"
+    else
+        echo "  [WARN] $label marker 缺失或不可执行: $path"
+    fi
+}
+
+_popos_verify_mise_runtime() {
+    local label="$1" tool="$2" mise_bin="$3"
+    if [ -x "$mise_bin" ] && "$mise_bin" where "$tool" >/dev/null 2>&1; then
+        echo "  [OK]   $label (mise)"
+    else
+        echo "  [WARN] $label 未由 mise 解析"
+    fi
+}
+
 popos_verify() {
     local failures=0 path command_name
     local profile="$HOME/.config/envbat/profile.sh"
@@ -51,10 +69,10 @@ popos_verify() {
     echo "========================================"
     echo ">>> Required invariants"
 
-    if [ -f "$profile" ] && grep -Eq '^ENVBAT_PROFILE_SCHEMA=2$' "$profile"; then
-        echo "  [OK]   profile schema v2"
+    if [ -f "$profile" ] && grep -Eq '^ENVBAT_PROFILE_SCHEMA=4$' "$profile"; then
+        echo "  [OK]   profile schema v4"
     else
-        echo "  [FAIL] profile 缺失或不是 schema v2"
+        echo "  [FAIL] profile 缺失或不是 schema v4"
         failures=$((failures + 1))
     fi
 
@@ -95,13 +113,24 @@ popos_verify() {
         echo "  [SKIP] oh-my-zsh disabled"
     fi
 
-    if [ "${INSTALL_GO:-false}" = true ]; then _popos_verify_optional_command "Go" go; fi
-    if [ "${INSTALL_NVM_NODE:-false}" = true ]; then _popos_verify_optional_path "nvm" "$base/tools/nvm/nvm.sh"; fi
-    if [ "${INSTALL_PYENV:-false}" = true ]; then _popos_verify_optional_path "pyenv" "$base/tools/pyenv/bin/pyenv"; fi
-    if [ "${INSTALL_RUSTUP:-false}" = true ]; then _popos_verify_optional_path "rustc" "$base/tools/cargo/bin/rustc"; fi
+    local mise_bin="$base/tools/bin/mise"
+    if [ "${INSTALL_MISE:-false}" = true ]; then
+        _popos_verify_optional_executable "mise" "$mise_bin"
+        _popos_verify_optional_path "mise shims" "$base/tools/mise/shims"
+    else
+        echo "  [SKIP] mise disabled"
+    fi
+    if [ "${INSTALL_GO:-false}" = true ]; then _popos_verify_mise_runtime "Go" go "$mise_bin"; fi
+    if [ "${INSTALL_NODE:-false}" = true ]; then _popos_verify_mise_runtime "Node" node "$mise_bin"; fi
+    if [ "${INSTALL_PYTHON:-false}" = true ]; then _popos_verify_mise_runtime "Python" python "$mise_bin"; fi
+    if [ "${INSTALL_RUST:-false}" = true ]; then _popos_verify_mise_runtime "Rust" rust "$mise_bin"; fi
+    if [ "${INSTALL_UV:-false}" = true ]; then
+        _popos_verify_optional_executable "uv" "$base/tools/bin/uv"
+        _popos_verify_optional_executable "uvx" "$base/tools/bin/uvx"
+    fi
     if [ "${INSTALL_NEOVIM:-false}" = true ]; then _popos_verify_optional_command "Neovim" nvim; fi
     if [ "${INSTALL_DOCKER:-false}" = true ]; then _popos_verify_optional_command "Docker" docker; fi
-    if [ "${INSTALL_JAVA:-skip}" != skip ]; then _popos_verify_optional_command "Java" java; fi
+    if [ "${INSTALL_JAVA:-skip}" != skip ]; then _popos_verify_mise_runtime "Java" java "$mise_bin"; fi
 
     if [ "${INSTALL_CHINESE:-false}" = true ]; then
         _popos_verify_optional_command "fcitx5" fcitx5

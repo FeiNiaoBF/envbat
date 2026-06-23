@@ -32,8 +32,31 @@ if popos_verify >/dev/null 2>&1; then
     fail_test "schema v1 profile passed verification"
 fi
 
-printf 'ENVBAT_PROFILE_SCHEMA=2\n' > "$HOME/.config/envbat/profile.sh"
-popos_verify >/dev/null || fail_test "valid required setup failed verification"
+printf 'ENVBAT_PROFILE_SCHEMA=4\n' > "$HOME/.config/envbat/profile.sh"
+INSTALL_MISE=true
+INSTALL_NODE=true
+INSTALL_UV=true
+verify_output=$(popos_verify) || fail_test "valid required setup failed verification"
+grep -q '\[WARN\].*mise marker' <<< "$verify_output" || fail_test "missing managed mise was not reported"
+grep -q '\[WARN\].*uv marker' <<< "$verify_output" || fail_test "missing managed uv was not reported"
+mkdir -p "$INSTALL_BASE/tools/bin"
+mkdir -p "$INSTALL_BASE/tools/mise/shims"
+cat > "$INSTALL_BASE/tools/bin/mise" <<'MISE'
+#!/usr/bin/env sh
+case "$1" in
+    where) exit 0 ;;
+    --version) echo "mise 1.0.0" ;;
+    *) exit 1 ;;
+esac
+MISE
+printf '#!/usr/bin/env sh\nexit 0\n' > "$INSTALL_BASE/tools/bin/uv"
+printf '#!/usr/bin/env sh\nexit 0\n' > "$INSTALL_BASE/tools/bin/uvx"
+chmod +x "$INSTALL_BASE/tools/bin/mise" "$INSTALL_BASE/tools/bin/uv" "$INSTALL_BASE/tools/bin/uvx"
+verify_output=$(popos_verify) || fail_test "managed uv verification failed"
+grep -q '\[OK\].*mise$' <<< "$verify_output" || fail_test "managed mise was not verified"
+grep -q '\[OK\].*Node' <<< "$verify_output" || fail_test "mise-managed Node was not verified"
+grep -q '\[OK\].*uv$' <<< "$verify_output" || fail_test "managed uv was not verified"
+grep -q '\[OK\].*uvx$' <<< "$verify_output" || fail_test "managed uvx was not verified"
 
 printf '# loader missing\n' > "$HOME/.zshrc"
 if popos_verify >/dev/null 2>&1; then

@@ -97,12 +97,14 @@ popos_ask_questions() {
     ask_input "安装基础目录" "$default_base" INSTALL_BASE
 
     title "开发语言"
+    ask_bool "安装 mise (语言版本管理器)?" INSTALL_MISE
     ask_bool "安装 Go 语言?" INSTALL_GO
-    ask_bool "安装 Node.js (via nvm)?" INSTALL_NVM_NODE
-    ask_bool "安装 Python (via pyenv)?" INSTALL_PYENV
-    ask_bool "安装 Rust (via rustup)?" INSTALL_RUSTUP
+    ask_bool "安装 Node.js (via mise)?" INSTALL_NODE
+    ask_bool "安装 Python (via mise)?" INSTALL_PYTHON
+    ask_bool "安装 Rust (via mise)?" INSTALL_RUST
     ask_bool "安装 uv (Python 包管理器)?" INSTALL_UV
     ask_select "Java 版本?" INSTALL_JAVA "skip" "11" "17" "21"
+    popos_normalize_mise_selection
 
     title "编辑器与工具"
     ask_bool "安装 Neovim?" INSTALL_NEOVIM
@@ -135,7 +137,8 @@ popos_print_selection_summary() {
     echo " 配置摘要"
     echo "========================================"
     printf "  安装目录: %s\n" "$INSTALL_BASE"
-    printf "  Go/Node/Python/Rust/uv/Java: %s/%s/%s/%s/%s/%s\n" "$INSTALL_GO" "$INSTALL_NVM_NODE" "$INSTALL_PYENV" "$INSTALL_RUSTUP" "$INSTALL_UV" "$INSTALL_JAVA"
+    printf "  mise: %s\n" "$INSTALL_MISE"
+    printf "  Go/Node/Python/Rust/uv/Java: %s/%s/%s/%s/%s/%s\n" "$INSTALL_GO" "$INSTALL_NODE" "$INSTALL_PYTHON" "$INSTALL_RUST" "$INSTALL_UV" "$INSTALL_JAVA"
     printf "  Neovim/Docker/Zsh: %s/%s/%s\n" "$INSTALL_NEOVIM" "$INSTALL_DOCKER" "$INSTALL_OHMYZSH"
     printf "  Security/Chinese/Chrome: %s/%s/%s\n" "$INSTALL_UFW,$INSTALL_FAIL2BAN,$INSTALL_AUTO_UPDATES" "$INSTALL_CHINESE" "$INSTALL_CHROME"
     printf "  SSH: %s\n" "$INSTALL_SSH"
@@ -153,7 +156,7 @@ popos_prepare_profile() {
             fail "--repair 需要现有的 ~/.config/envbat/profile.sh"
             return 1
         fi
-        echo "  使用现有 schema v2 profile 执行 repair"
+        echo "  使用现有 schema v4 profile 执行 repair"
     elif $RECONFIGURE_MODE; then
         if [ "$profile_exists" != true ]; then
             popos_profile_initial_defaults
@@ -182,6 +185,7 @@ popos_prepare_profile() {
         source "$PROFILE_FILE"
     fi
 
+    popos_normalize_mise_selection
     case "$INSTALL_BASE" in
         /*)
             if [ "$INSTALL_BASE" = / ]; then
@@ -196,6 +200,46 @@ popos_prepare_profile() {
     esac
 
     popos_clean_old_bashrc
+}
+
+popos_normalize_mise_selection() {
+    if [ "${INSTALL_GO:-false}" = true ] || [ "${INSTALL_NODE:-false}" = true ] || \
+        [ "${INSTALL_PYTHON:-false}" = true ] || [ "${INSTALL_RUST:-false}" = true ] || \
+        [ "${INSTALL_JAVA:-skip}" != skip ]; then
+        INSTALL_MISE=true
+    fi
+}
+
+MISE_READY=false
+
+popos_prepare_mise() {
+    if popos_install_mise; then
+        MISE_READY=true
+        return 0
+    fi
+    MISE_READY=false
+    return 1
+}
+
+popos_cleanup_disabled_mise_tools() {
+    local failures=0
+    if [ "${INSTALL_GO:-false}" != true ] && ! popos_mise_unuse go; then failures=$((failures + 1)); fi
+    if [ "${INSTALL_NODE:-false}" != true ] && ! popos_mise_unuse node; then failures=$((failures + 1)); fi
+    if [ "${INSTALL_PYTHON:-false}" != true ] && ! popos_mise_unuse python; then failures=$((failures + 1)); fi
+    if [ "${INSTALL_RUST:-false}" != true ] && ! popos_mise_unuse rust; then failures=$((failures + 1)); fi
+    if [ "${INSTALL_JAVA:-skip}" = skip ] && ! popos_mise_unuse java; then failures=$((failures + 1)); fi
+    [ "$failures" -eq 0 ]
+}
+
+run_mise_runtime() {
+    local enabled="$1" stage_name="$2" tool="$3" selector="$4"
+    if [ "$enabled" != true ]; then
+        stage_skip "$stage_name" "user disabled"
+    elif $MISE_READY; then
+        stage_optional "$stage_name" popos_mise_use "$tool" "$selector"
+    else
+        stage_skip "$stage_name" "mise unavailable"
+    fi
 }
 
 popos_setup_directories() {
@@ -215,12 +259,19 @@ stage_optional "flatpak cleanup" popos_cleanup_flatpak
 run_required "base tools" popos_install_tools
 
 if [ "$INSTALL_OHMYZSH" = true ]; then stage_optional "oh-my-zsh + Powerlevel10k" popos_install_ohmyzsh; else stage_skip "oh-my-zsh + Powerlevel10k" "user disabled"; fi
-if [ "$INSTALL_GO" = true ]; then stage_optional "go" popos_install_go; else stage_skip "go" "user disabled"; fi
-if [ "$INSTALL_NVM_NODE" = true ]; then stage_optional "node nvm" popos_install_nvm_node; else stage_skip "node nvm" "user disabled"; fi
-if [ "$INSTALL_PYENV" = true ]; then stage_optional "pyenv" popos_install_pyenv; else stage_skip "pyenv" "user disabled"; fi
-if [ "$INSTALL_RUSTUP" = true ]; then stage_optional "rustup" popos_install_rustup; else stage_skip "rustup" "user disabled"; fi
+if [ "$INSTALL_MISE" = true ]; then
+    stage_optional "mise" popos_prepare_mise
+else
+    stage_skip "mise" "user disabled"
+    if popos_mise_is_available; then MISE_READY=true; fi
+fi
+if $MISE_READY; then stage_optional "mise global cleanup" popos_cleanup_disabled_mise_tools; else stage_skip "mise global cleanup" "mise unavailable"; fi
+run_mise_runtime "$INSTALL_GO" "go" go latest
+run_mise_runtime "$INSTALL_NODE" "node" node lts
+run_mise_runtime "$INSTALL_PYTHON" "python" python latest
+run_mise_runtime "$INSTALL_RUST" "rust" rust stable
+if [ "$INSTALL_JAVA" != skip ]; then run_mise_runtime true "java" java "temurin-$INSTALL_JAVA"; else stage_skip "java" "user disabled"; fi
 if [ "$INSTALL_UV" = true ]; then stage_optional "uv" popos_install_uv; else stage_skip "uv" "user disabled"; fi
-if [ "$INSTALL_JAVA" != skip ]; then stage_optional "java" popos_install_java; else stage_skip "java" "user disabled"; fi
 
 if [ "$INSTALL_UFW" = true ] || [ "$INSTALL_FAIL2BAN" = true ] || [ "$INSTALL_AUTO_UPDATES" = true ]; then stage_optional "security" popos_install_security; else stage_skip "security" "user disabled"; fi
 if [ "$INSTALL_CHINESE" = true ]; then stage_optional "locale input method" popos_setup_locale; else stage_skip "locale input method" "user disabled"; fi

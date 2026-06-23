@@ -14,9 +14,10 @@ trap 'rm -rf -- "$test_root"' EXIT
 test_home="$test_root/home"
 backup_base="$test_root/backups"
 install_base="$test_root/data"
-mkdir -p "$test_home/.config/envbat" "$test_home/.config/nvim" "$test_home/.ssh"
+mkdir -p "$test_home/.config/envbat" "$test_home/.config/mise" "$test_home/.config/nvim" "$test_home/.ssh"
 printf 'original zshrc\n' > "$test_home/.zshrc"
-printf 'ENVBAT_PROFILE_SCHEMA=2\nINSTALL_BASE=%q\n' "$install_base" > "$test_home/.config/envbat/profile.sh"
+printf 'ENVBAT_PROFILE_SCHEMA=4\nINSTALL_BASE=%q\n' "$install_base" > "$test_home/.config/envbat/profile.sh"
+printf '[tools]\nnode = "lts"\n' > "$test_home/.config/mise/config.toml"
 printf 'set number\n' > "$test_home/.config/nvim/init.vim"
 printf 'backup key\n' > "$test_home/.ssh/id_ed25519"
 chmod 600 "$test_home/.ssh/id_ed25519"
@@ -28,6 +29,7 @@ HOME="$test_home" ENVBAT_BACKUP_BASE="$backup_base" \
 printf 'changed zshrc\n' > "$test_home/.zshrc"
 printf 'changed key\n' > "$test_home/.ssh/id_ed25519"
 rm -rf -- "$test_home/.config/nvim"
+rm -rf -- "$test_home/.config/mise"
 
 if ! printf 'y\nn\nn\n' | HOME="$test_home" ENVBAT_BACKUP_BASE="$backup_base" \
     PYTHON_BIN="$PYTHON_BIN" bash "$TEST_SCRIPT_DIR/../restore.sh" -d roundtrip >/dev/null; then
@@ -36,6 +38,7 @@ fi
 
 grep -q '^original zshrc$' "$test_home/.zshrc" || fail_test "zshrc roundtrip failed"
 grep -q '^set number$' "$test_home/.config/nvim/init.vim" || fail_test "Neovim roundtrip failed"
+grep -q '^node = "lts"$' "$test_home/.config/mise/config.toml" || fail_test "mise config roundtrip failed"
 grep -q '^changed key$' "$test_home/.ssh/id_ed25519" || fail_test "SSH was restored without confirmation"
 
 echo "PASS: backup restore roundtrip"

@@ -21,7 +21,7 @@ envbat/
     ├── directories.sh     # 创建目录结构 + 符号链接
     ├── config.sh          # 配置环境变量
     ├── install.sh         # 安装基础工具
-    ├── lang.sh            # Go / Node / pyenv / Rust / Java
+    ├── lang.sh            # mise 管理 Go / Node / Python / Rust / Java；uv 独立安装
     ├── shell.sh           # zsh / oh-my-zsh / Powerlevel10k
     ├── security.sh        # UFW / Fail2ban / 自动安全更新
     ├── locale.sh          # 中文 locale / fcitx5 输入法
@@ -59,6 +59,10 @@ chmod +x popos/popos-power.sh
 ./popos/popos-power.sh
 ```
 
+语言运行时统一由 mise 管理：Go 使用 `latest`，Node.js 使用 `lts`，Python 使用 `latest`，Rust 使用 `stable`，Java 使用所选的 Temurin 11/17/21。mise 二进制位于 `$INSTALL_BASE/tools/bin/mise`，长期运行时和 shims 位于 `$INSTALL_BASE/tools/mise`，可删除缓存位于 `$INSTALL_BASE/cache/mise`，配置位于 `~/.config/mise/config.toml`。交互式 shell 使用 `mise activate`，IDE 和非交互命令使用 shims；项目可通过仓库内的 `mise.toml` 覆盖全局版本。
+
+profile 不再覆盖 `XDG_DATA_HOME` 或 `XDG_CACHE_HOME`，其他应用使用系统默认的 `~/.local/share` 和 `~/.cache`；只有 mise 通过专用变量使用 `/data`。旧 nvm、pyenv、rustup 和 Go 目录不会自动删除，但 schema 4 profile 不再把它们加入 `PATH`。`uv` 和 `uvx` 仍独立安装到 `$INSTALL_BASE/tools/bin`，不由 mise 管理。
+
 ### Backup & Restore (PopOS)
 
 备份用户配置、包列表和系统设置：
@@ -83,7 +87,7 @@ chmod +x popos/popos-power.sh
 
 Restore 默认策略：
 
-- 默认恢复 dotfiles、envbat profile、Neovim、oh-my-zsh custom、目录结构和缺失的 Git 仓库
+- 默认恢复 dotfiles、envbat profile、mise 配置、Neovim、oh-my-zsh custom、目录结构和缺失的 Git 仓库
 - `.ssh` 必须单独确认
 - 不默认恢复 apt sources、hosts、hostname、crontab、netplan
 - 不默认执行完整 apt 包列表恢复
@@ -91,11 +95,11 @@ Restore 默认策略：
 
 备份与恢复契约：
 
-- profile 使用 `ENVBAT_PROFILE_SCHEMA=2`；旧 profile 自动备份并保守迁移，新增选项默认关闭
+- profile 使用 `ENVBAT_PROFILE_SCHEMA=4`；schema 2 的语言选择自动迁移到 mise，其他旧 profile 保守迁移，缺失的新选项默认关闭
 - 备份先写入权限为 `700` 的 staging 目录，归档和 manifest 权限为 `600`
 - dotfiles 和 manifest 成功并通过 SHA-256 校验后，才更新 `latest`
 - `manifest.json` 当前 schema 为 v2；restore 明确拒绝 v1、缺失文件和校验和损坏
-- 恢复写入前创建安全快照；dotfiles、Neovim、oh-my-zsh custom 和 SSH 使用临时目标替换
+- 恢复写入前创建安全快照；dotfiles、mise、Neovim、oh-my-zsh custom 和 SSH 使用临时目标替换
 - Git 只 clone 不存在的仓库，不 pull 或覆盖已有路径
 - netplan 仅备份供人工检查，不自动恢复
 

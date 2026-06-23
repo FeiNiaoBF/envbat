@@ -79,6 +79,13 @@ backup_dotfiles() {
             return 1
         fi
     fi
+    if [ -d "$HOME/.config/mise" ]; then
+        if ! mkdir -p "$work_dir/mise" || ! cp -R "$HOME/.config/mise/." "$work_dir/mise/"; then
+            rm -rf -- "$work_dir"
+            fail "复制 mise 配置失败"
+            return 1
+        fi
+    fi
     if [ -d "$HOME/.ssh" ]; then
         if ! mkdir -p "$work_dir/ssh" || ! cp -R "$HOME/.ssh/." "$work_dir/ssh/"; then
             rm -rf -- "$work_dir"

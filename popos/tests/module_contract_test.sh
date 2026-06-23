@@ -16,6 +16,10 @@ trap 'rm -rf -- "$test_home"' EXIT
 HOME="$test_home"
 INSTALL_BASE="$test_home/data"
 
+grep -q '"$DATA_HOME/tools/mise"' "$SCRIPT_DIR/../directories.sh" || fail_test "mise persistent root missing"
+grep -q '"$DATA_HOME/cache/mise"' "$SCRIPT_DIR/../directories.sh" || fail_test "mise cache root missing"
+grep -q '"$DATA_HOME/apps"' "$SCRIPT_DIR/../directories.sh" || fail_test "application root missing"
+
 sudo() {
     if [ "${1:-}" = mkdir ]; then
         return 9

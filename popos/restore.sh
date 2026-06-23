@@ -130,7 +130,7 @@ create_safety_snapshot() {
     for item in \
         "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.p10k.zsh" \
         "$HOME/.gitconfig" "$HOME/.gitignore_global" "$HOME/.ssh" \
-        "$HOME/.config/nvim" "$HOME/.config/envbat/profile.sh" \
+        "$HOME/.config/mise" "$HOME/.config/nvim" "$HOME/.config/envbat/profile.sh" \
         "$HOME/.oh-my-zsh/custom"; do
         [ -e "$item" ] || [ -L "$item" ] || continue
         rel="${item#$HOME/}"
@@ -226,6 +226,9 @@ restore_user_state() {
     done
     if [ -f "$RESTORE_WORK_DIR/envbat/profile.sh" ]; then
         atomic_replace_file "$RESTORE_WORK_DIR/envbat/profile.sh" "$HOME/.config/envbat/profile.sh" 600 || return 1
+    fi
+    if [ -d "$RESTORE_WORK_DIR/mise" ]; then
+        atomic_replace_dir "$RESTORE_WORK_DIR/mise" "$HOME/.config/mise" 700 || return 1
     fi
     if [ -d "$RESTORE_WORK_DIR/nvim" ]; then
         atomic_replace_dir "$RESTORE_WORK_DIR/nvim" "$HOME/.config/nvim" 700 || return 1
