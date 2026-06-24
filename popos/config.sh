@@ -18,6 +18,11 @@ _popos_configure_profile_loader() {
         $0 == "# === envbat profile ===" { managed=1; next }
         $0 == "# === end envbat profile ===" { managed=0; next }
         managed { next }
+        legacy_if {
+            if ($0 ~ /^[[:space:]]*fi[[:space:]]*$/) legacy_if=0
+            next
+        }
+        /^[[:space:]]*if .*\.config\/envbat\/profile\.sh.*then[[:space:]]*$/ { legacy_if=1; next }
         /\.config\/envbat\/profile\.sh/ { next }
         $0 == "# === envbat ===" { next }
         $0 == "# envbat — load persisted profile" { next }
