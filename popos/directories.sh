@@ -8,16 +8,11 @@ popos_create_dirs() {
     local user
     user="$(whoami)"
     local dirs=(
-        "$DATA_HOME/workspace/github" "$DATA_HOME/workspace/local" "$DATA_HOME/workspace/experiments"
-        "$DATA_HOME/datasets/raw" "$DATA_HOME/datasets/processed" "$DATA_HOME/datasets/cache"
-        "$DATA_HOME/models/huggingface" "$DATA_HOME/models/fine_tuned" "$DATA_HOME/models/checkpoints"
-        "$DATA_HOME/envs/conda" "$DATA_HOME/envs/docker"
-        "$DATA_HOME/tools/bin" "$DATA_HOME/tools/mise" "$DATA_HOME/tools/npm-global" "$DATA_HOME/tools/cargo"
-        "$DATA_HOME/apps" "$DATA_HOME/cache/mise"
-        "$DATA_HOME/runs/logs" "$DATA_HOME/runs/outputs" "$DATA_HOME/runs/mlruns"
-        "$DATA_HOME/library" "$DATA_HOME/shared"
-        "$DATA_HOME/backups/system" "$DATA_HOME/backups/dotfiles" "$DATA_HOME/backups/home"
-        "$DATA_HOME/secrets" "$DATA_HOME/temp" "$DATA_HOME/archives"
+        "$DATA_HOME/workspace/github" "$DATA_HOME/workspace/local" "$DATA_HOME/workspace/obsidian" "$DATA_HOME/workspace/books"
+        "$DATA_HOME/apps"
+        "$DATA_HOME/tools/bin" "$DATA_HOME/tools/mise" "$DATA_HOME/tools/fonts"
+        "$DATA_HOME/cache/mise"
+        "$DATA_HOME/secrets"
     )
 
     echo ">>> 创建目录结构 <<<"
@@ -48,6 +43,32 @@ popos_create_dirs() {
     fi
     echo "  创建 $created 个新目录"
     [ "$failures" -eq 0 ]
+}
+
+popos_prune_legacy_dirs() {
+    echo ">>> 清理遗留目录（仅空目录） <<<"
+    local legacy=(
+        "$DATA_HOME/workspace/experiments"
+        "$DATA_HOME/datasets" "$DATA_HOME/models" "$DATA_HOME/envs" "$DATA_HOME/runs"
+        "$DATA_HOME/library" "$DATA_HOME/shared" "$DATA_HOME/archives"
+        "$DATA_HOME/temp"
+        "$DATA_HOME/backups"
+    )
+    local d pruned=0 kept=0
+    for d in "${legacy[@]}"; do
+        if [ ! -e "$d" ]; then
+            continue
+        fi
+        if rmdir "$d" 2>/dev/null; then
+            echo "  [PRUNE] $d"
+            pruned=$((pruned + 1))
+        else
+            echo "  [KEEP]  $d (非空，保留)"
+            kept=$((kept + 1))
+        fi
+    done
+    echo "  清理 $pruned 个空目录，保留 $kept 个非空目录"
+    [ "$kept" -eq 0 ] || warn "存在非空遗留目录，请人工检查后处理"
 }
 
 popos_ensure_symlinks() {

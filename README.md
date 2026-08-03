@@ -18,7 +18,7 @@ envbat/
     ├── setup.sh           # ── 入口：初始化 / repair / reconfigure
     ├── runner.sh          # 阶段执行器：OK/SKIP/WARN/FAIL 汇总
     ├── check.sh           # 检测系统环境
-    ├── directories.sh     # 创建目录结构 + 符号链接
+    ├── directories.sh     # 创建目录结构 + 符号链接 + 清理遗留空目录
     ├── config.sh          # 配置环境变量
     ├── install.sh         # 安装基础工具
     ├── lang.sh            # mise 管理 Go / Node / Python / Rust / Java；uv 独立安装
@@ -26,12 +26,36 @@ envbat/
     ├── security.sh        # UFW / Fail2ban / 自动安全更新
     ├── locale.sh          # 中文 locale / fcitx5 输入法
     ├── docker.sh          # Docker 官方源与插件
-    ├── backup.sh          # staging 校验后原子发布备份
+    ├── backup.sh          # staging 校验后原子发布备份（支持 --target / --install-cron）
     ├── restore.sh         # manifest v2 校验后的安全恢复
     ├── manifest.py        # manifest、校验和与路径验证
     ├── verify.sh          # 验证配置结果
     └── popos-power.sh     # [独立] 交互式电源管理（空闲/锁屏延时）
 ```
+
+## 数据目录布局（/data）
+
+大分类设计：仅 5 个一级目录，规划写进 README 而非空目录。
+
+```
+/data/
+├── workspace/   # 个人数据（唯一不可再生区）
+│   ├── github/      GitHub 克隆
+│   ├── local/       本地项目
+│   ├── obsidian/    Obsidian 知识库
+│   └── books/       电子书
+├── apps/        # 应用软件（flatpak / appimage / resilio）
+├── tools/       # 工具链（mise 运行时 / fonts / bin）
+├── cache/       # 可再生缓存（mise 缓存 / 临时文件，可随时删）
+└── secrets/     # 密钥（权限 700，备份时排除）
+```
+
+规划备忘（将来需要时再建，用官方变量配置，不自己造目录体系）：
+
+- AI 训练流水线：`models/` `datasets/` `runs/` `envs/`，对应 `HF_HOME`、`CONDA_ENVS_PATH`、docker `data-root`
+- 环境一律由官方机制管理：mise（`MISE_DATA_DIR`）、conda（`CONDA_ENVS_PATH`）、docker（`data-root`）
+
+备份目标位于系统盘 `/backup`（数据盘与系统盘互备，无外部介质下的现实方案）。
 
 ## 使用方式
 
@@ -65,11 +89,20 @@ profile 不再覆盖 `XDG_DATA_HOME` 或 `XDG_CACHE_HOME`，其他应用使用�
 
 ### Backup & Restore (PopOS)
 
-备份用户配置、包列表和系统设置：
+备份用户配置、包列表和系统设置到系统盘 `/backup`：
 
 ```bash
-# 备份
+# 首次准备备份目录（一次）
+sudo mkdir -p /backup && sudo chown $USER:$USER /backup
+
+# 备份（默认 /backup/envbat）
 ./popos/backup.sh
+
+# 备份到自定义位置
+./popos/backup.sh --target /path/to/backup
+
+# 安装每日 workspace 数据备份 cron（rsync 到 /backup/workspace）
+./popos/backup.sh --install-cron
 
 # 备份会生成:
 #   MANIFEST.txt    给人阅读
@@ -95,6 +128,7 @@ Restore 默认策略：
 
 备份与恢复契约：
 
+- 备份目标在系统盘 `/backup`（默认），与数据盘 `/data` 互备；`secrets/` 与 `cache/` 在目录树导出中显式排除
 - profile 使用 `ENVBAT_PROFILE_SCHEMA=4`；schema 2 的语言选择自动迁移到 mise，其他旧 profile 保守迁移，缺失的新选项默认关闭
 - 备份先写入权限为 `700` 的 staging 目录，归档和 manifest 权限为 `600`
 - dotfiles 和 manifest 成功并通过 SHA-256 校验后，才更新 `latest`

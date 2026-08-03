@@ -8,11 +8,12 @@ source "$BACKUP_SCRIPT_DIR/interactive.sh"
 # shellcheck source=popos/runner.sh
 source "$BACKUP_SCRIPT_DIR/runner.sh"
 
-BACKUP_BASE="${ENVBAT_BACKUP_BASE:-${BACKUP_BASE:-/data/backups/envbat}}"
+BACKUP_BASE="${ENVBAT_BACKUP_BASE:-${BACKUP_BASE:-/backup/envbat}}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 INSTALL_BASE="${INSTALL_BASE:-/data}"
 BACKUP_DIR=""
 FINAL_DIR=""
+CRON_MODE=false
 
 DOTFILES_STATUS=fail
 PACKAGES_STATUS=skip
@@ -21,8 +22,33 @@ DIRTREE_STATUS=skip
 GITREPOS_STATUS=skip
 
 show_help() {
-    echo "用法: $0 [--help]"
-    echo "安全备份用户配置到 $BACKUP_BASE"
+    echo "用法: $0 [--target DIR] [--install-cron] [--help]"
+    echo "安全备份用户配置到 \$BACKUP_BASE (默认 /backup/envbat)"
+    echo ""
+    echo "  --target DIR    备份目标目录（默认 /backup/envbat，即系统盘）"
+    echo "  --install-cron  安装每日 workspace 数据备份 cron（rsync 到 /backup/workspace）"
+    echo "  --help          显示帮助"
+}
+
+backup_install_cron() {
+    local cron_line workspace_src target_dir
+    workspace_src="$INSTALL_BASE/workspace/"
+    target_dir="/backup/workspace/"
+    cron_line="15 3 * * * rsync -a --delete --exclude='.git' '$workspace_src' '$target_dir'"
+    if ! crontab -l 2>/dev/null | grep -Fq "$target_dir"; then
+        (crontab -l 2>/dev/null; echo "$cron_line") | crontab - || {
+            fail "cron 安装失败"
+            return 1
+        }
+        ok "已安装每日备份 cron: $cron_line"
+    else
+        echo "  [SKIP] 备份 cron 已存在"
+    fi
+    if [ ! -d "/backup" ]; then
+        warn "/backup 不存在；请先运行: sudo mkdir -p /backup && sudo chown \$USER:\$USER /backup"
+        return 1
+    fi
+    return 0
 }
 
 backup_load_profile() {
@@ -150,7 +176,7 @@ backup_sysconfig() {
 backup_directory_tree() {
     DIRTREE_STATUS=warn
     if ! find "$INSTALL_BASE" \
-        \( -path "$BACKUP_BASE" -o -path '*/lost+found' -o -path '*/temp' -o -path '*/.cache' \) -prune -o \
+        \( -path "$BACKUP_BASE" -o -path '*/lost+found' -o -path '*/cache' -o -path '*/.cache' -o -path "$INSTALL_BASE/secrets" \) -prune -o \
         -type d -print | sort > "$BACKUP_DIR/directory-tree.txt" || \
         ! chmod 600 "$BACKUP_DIR/directory-tree.txt"; then
         fail "目录结构导出失败"
@@ -270,9 +296,33 @@ backup_main() {
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     trap backup_cleanup_staging EXIT
     trap backup_stop_on_signal INT TERM
-    case "${1:-}" in
-        "") backup_main ;;
-        --help|-h) show_help ;;
-        *) warn "未知参数: $1"; exit 1 ;;
-    esac
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --target)
+                if [ $# -lt 2 ]; then
+                    warn "--target 需要目录参数"
+                    exit 1
+                fi
+                BACKUP_BASE="$2"
+                shift 2
+                ;;
+            --install-cron)
+                CRON_MODE=true
+                shift
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            *)
+                warn "未知参数: $1"
+                exit 1
+                ;;
+        esac
+    done
+    if $CRON_MODE; then
+        backup_install_cron
+        exit $?
+    fi
+    backup_main
 fi

@@ -8,7 +8,7 @@ source "$RESTORE_SCRIPT_DIR/interactive.sh"
 # shellcheck source=popos/runner.sh
 source "$RESTORE_SCRIPT_DIR/runner.sh"
 
-BACKUP_BASE="${ENVBAT_BACKUP_BASE:-${BACKUP_BASE:-/data/backups/envbat}}"
+BACKUP_BASE="${ENVBAT_BACKUP_BASE:-${BACKUP_BASE:-/backup/envbat}}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 INTERACTIVE=false
 SHOW_HELP=false

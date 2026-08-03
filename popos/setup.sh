@@ -245,6 +245,7 @@ run_mise_runtime() {
 popos_setup_directories() {
     popos_create_dirs || return 1
     popos_ensure_symlinks
+    popos_prune_legacy_dirs
 }
 
 echo ""
