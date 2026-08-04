@@ -78,7 +78,7 @@ export MISE_RUSTUP_HOME="$MISE_DATA_DIR/rustup"
 export MISE_CARGO_HOME="$MISE_DATA_DIR/cargo"
 export RUSTUP_HOME="$MISE_RUSTUP_HOME"
 export CARGO_HOME="$MISE_CARGO_HOME"
-export PATH="$TOOLS_HOME/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 
 PROFILE_ENV
         local var_name
@@ -93,13 +93,13 @@ PROFILE_ENV
 
 if [ "${INSTALL_MISE:-false}" = true ]; then
     export PATH="$MISE_DATA_DIR/shims:$CARGO_HOME/bin:$PATH"
-    if [ -x "$TOOLS_HOME/bin/mise" ]; then
+    if [ -x "$HOME/.local/bin/mise" ]; then
         case "$-" in
             *i*)
                 if [ -n "${ZSH_VERSION:-}" ]; then
-                    eval "$("$TOOLS_HOME/bin/mise" activate zsh)"
+                    eval "$("$HOME/.local/bin/mise" activate zsh)"
                 elif [ -n "${BASH_VERSION:-}" ]; then
-                    eval "$("$TOOLS_HOME/bin/mise" activate bash)"
+                    eval "$("$HOME/.local/bin/mise" activate bash)"
                 fi
                 ;;
         esac

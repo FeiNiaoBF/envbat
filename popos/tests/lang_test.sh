@@ -19,9 +19,9 @@ HOME="$test_root/home"
 INSTALL_BASE="$test_root/data"
 MISE_LOG="$test_root/mise.log"
 export MISE_LOG
-mkdir -p "$HOME" "$INSTALL_BASE/tools/bin"
+mkdir -p "$HOME" "$HOME/.local/bin"
 
-cat > "$INSTALL_BASE/tools/bin/mise" <<'MISE'
+cat > "$HOME/.local/bin/mise" <<'MISE'
 #!/usr/bin/env sh
 printf '%s\n' "$*" >> "$MISE_LOG"
 case "$1" in
@@ -30,7 +30,7 @@ case "$1" in
     *) exit 1 ;;
 esac
 MISE
-chmod +x "$INSTALL_BASE/tools/bin/mise"
+chmod +x "$HOME/.local/bin/mise"
 
 popos_mise_is_available || fail_test "existing managed mise was not detected"
 

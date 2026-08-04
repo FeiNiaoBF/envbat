@@ -10,7 +10,7 @@ popos_create_dirs() {
     local dirs=(
         "$DATA_HOME/workspace/github" "$DATA_HOME/workspace/local" "$DATA_HOME/workspace/obsidian" "$DATA_HOME/workspace/books"
         "$DATA_HOME/apps"
-        "$DATA_HOME/tools/bin" "$DATA_HOME/tools/mise" "$DATA_HOME/tools/fonts"
+        "$DATA_HOME/tools/mise" "$DATA_HOME/tools/fonts"
         "$DATA_HOME/cache/mise"
         "$DATA_HOME/secrets"
     )

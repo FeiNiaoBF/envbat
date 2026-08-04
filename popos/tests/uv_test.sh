@@ -18,7 +18,7 @@ test_root=$(mktemp -d)
 trap 'rm -rf -- "$test_root"' EXIT
 HOME="$test_root/home"
 INSTALL_BASE="$test_root/data"
-PATH="$INSTALL_BASE/tools/bin:$PATH"
+PATH="$HOME/.local/bin:$PATH"
 mkdir -p "$HOME"
 
 curl() {
@@ -33,13 +33,14 @@ INSTALLER
 }
 
 popos_install_uv >/dev/null || fail_test "valid installer flow failed"
-[ -x "$INSTALL_BASE/tools/bin/uv" ] || fail_test "uv was not installed under INSTALL_BASE"
-[ -x "$INSTALL_BASE/tools/bin/uvx" ] || fail_test "uvx was not installed"
+[ -x "$HOME/.local/bin/uv" ] || fail_test "uv was not installed under HOME/.local/bin"
+[ -x "$HOME/.local/bin/uvx" ] || fail_test "uvx was not installed"
 curl() { return 99; }
 popos_install_uv >/dev/null || fail_test "existing managed uv was not idempotent"
 
 INSTALL_BASE="$test_root/failure-data"
-PATH="$INSTALL_BASE/tools/bin:$PATH"
+HOME="$test_root/failure-home"
+PATH="$HOME/.local/bin:$PATH"
 curl() { printf 'exit 0\n'; }
 if popos_install_uv >/dev/null 2>&1; then
     fail_test "missing uv binary returned success"

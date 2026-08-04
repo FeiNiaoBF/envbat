@@ -14,7 +14,7 @@ test_root=$(mktemp -d)
 trap 'rm -rf -- "$test_root"' EXIT
 HOME="$test_root/home"
 INSTALL_BASE="$test_root/data"
-mkdir -p "$HOME/.config/envbat" "$INSTALL_BASE/workspace/github" "$INSTALL_BASE/tools/bin" "$INSTALL_BASE/cache" "$test_root/bin"
+mkdir -p "$HOME/.config/envbat" "$HOME/.local/bin" "$INSTALL_BASE/workspace/github" "$INSTALL_BASE/tools/mise" "$INSTALL_BASE/cache" "$test_root/bin"
 
 for tool in git curl wget gcc make unzip tar python3 zsh; do
     printf '#!/usr/bin/env bash\nexit 0\n' > "$test_root/bin/$tool"
@@ -39,9 +39,8 @@ INSTALL_UV=true
 verify_output=$(popos_verify) || fail_test "valid required setup failed verification"
 grep -q '\[WARN\].*mise marker' <<< "$verify_output" || fail_test "missing managed mise was not reported"
 grep -q '\[WARN\].*uv marker' <<< "$verify_output" || fail_test "missing managed uv was not reported"
-mkdir -p "$INSTALL_BASE/tools/bin"
 mkdir -p "$INSTALL_BASE/tools/mise/shims"
-cat > "$INSTALL_BASE/tools/bin/mise" <<'MISE'
+cat > "$HOME/.local/bin/mise" <<'MISE'
 #!/usr/bin/env sh
 case "$1" in
     where) exit 0 ;;
@@ -49,9 +48,9 @@ case "$1" in
     *) exit 1 ;;
 esac
 MISE
-printf '#!/usr/bin/env sh\nexit 0\n' > "$INSTALL_BASE/tools/bin/uv"
-printf '#!/usr/bin/env sh\nexit 0\n' > "$INSTALL_BASE/tools/bin/uvx"
-chmod +x "$INSTALL_BASE/tools/bin/mise" "$INSTALL_BASE/tools/bin/uv" "$INSTALL_BASE/tools/bin/uvx"
+printf '#!/usr/bin/env sh\nexit 0\n' > "$HOME/.local/bin/uv"
+printf '#!/usr/bin/env sh\nexit 0\n' > "$HOME/.local/bin/uvx"
+chmod +x "$HOME/.local/bin/mise" "$HOME/.local/bin/uv" "$HOME/.local/bin/uvx"
 verify_output=$(popos_verify) || fail_test "managed uv verification failed"
 grep -q '\[OK\].*mise$' <<< "$verify_output" || fail_test "managed mise was not verified"
 grep -q '\[OK\].*Node' <<< "$verify_output" || fail_test "mise-managed Node was not verified"

@@ -76,11 +76,14 @@ popos_verify() {
         failures=$((failures + 1))
     fi
 
-    for path in "$base" "$base/workspace/github" "$base/tools/bin" "$base/cache"; do
+    for path in "$base" "$base/workspace/github" "$base/tools/mise" "$base/cache"; do
         if ! _popos_verify_required_file "核心目录" "$path"; then
             failures=$((failures + 1))
         fi
     done
+    if ! _popos_verify_optional_executable "mise" "$HOME/.local/bin/mise"; then
+        echo "  [WARN] mise 未安装: $HOME/.local/bin/mise"
+    fi
 
     if ! _popos_verify_shell_loader "$HOME/.bashrc"; then failures=$((failures + 1)); fi
     if ! _popos_verify_shell_loader "$HOME/.zshrc"; then failures=$((failures + 1)); fi
@@ -113,7 +116,7 @@ popos_verify() {
         echo "  [SKIP] oh-my-zsh disabled"
     fi
 
-    local mise_bin="$base/tools/bin/mise"
+    local mise_bin="$HOME/.local/bin/mise"
     if [ "${INSTALL_MISE:-false}" = true ]; then
         _popos_verify_optional_executable "mise" "$mise_bin"
         _popos_verify_optional_path "mise shims" "$base/tools/mise/shims"
@@ -125,8 +128,8 @@ popos_verify() {
     if [ "${INSTALL_PYTHON:-false}" = true ]; then _popos_verify_mise_runtime "Python" python "$mise_bin"; fi
     if [ "${INSTALL_RUST:-false}" = true ]; then _popos_verify_mise_runtime "Rust" rust "$mise_bin"; fi
     if [ "${INSTALL_UV:-false}" = true ]; then
-        _popos_verify_optional_executable "uv" "$base/tools/bin/uv"
-        _popos_verify_optional_executable "uvx" "$base/tools/bin/uvx"
+        _popos_verify_optional_executable "uv" "$HOME/.local/bin/uv"
+        _popos_verify_optional_executable "uvx" "$HOME/.local/bin/uvx"
     fi
     if [ "${INSTALL_NEOVIM:-false}" = true ]; then _popos_verify_optional_command "Neovim" nvim; fi
     if [ "${INSTALL_DOCKER:-false}" = true ]; then _popos_verify_optional_command "Docker" docker; fi

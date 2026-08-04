@@ -83,9 +83,9 @@ chmod +x popos/popos-power.sh
 ./popos/popos-power.sh
 ```
 
-语言运行时统一由 mise 管理：Go 使用 `latest`，Node.js 使用 `lts`，Python 使用 `latest`，Rust 使用 `stable`，Java 使用所选的 Temurin 11/17/21。mise 二进制位于 `$INSTALL_BASE/tools/bin/mise`，长期运行时和 shims 位于 `$INSTALL_BASE/tools/mise`，可删除缓存位于 `$INSTALL_BASE/cache/mise`，配置位于 `~/.config/mise/config.toml`。交互式 shell 使用 `mise activate`，IDE 和非交互命令使用 shims；项目可通过仓库内的 `mise.toml` 覆盖全局版本。
+语言运行时统一由 mise 管理：Go 使用 `latest`，Node.js 使用 `lts`，Python 使用 `latest`，Rust 使用 `stable`，Java 使用所选的 Temurin 11/17/21。mise 二进制位于官方默认位置 `~/.local/bin/mise`，长期运行时和 shims 位于 `$INSTALL_BASE/tools/mise`（`MISE_DATA_DIR`），可删除缓存位于 `$INSTALL_BASE/cache/mise`，配置位于 `~/.config/mise/config.toml`。交互式 shell 使用 `mise activate`，IDE 和非交互命令使用 shims；项目可通过仓库内的 `mise.toml` 覆盖全局版本。
 
-profile 不再覆盖 `XDG_DATA_HOME` 或 `XDG_CACHE_HOME`，其他应用使用系统默认的 `~/.local/share` 和 `~/.cache`；只有 mise 通过专用变量使用 `/data`。旧 nvm、pyenv、rustup 和 Go 目录不会自动删除，但 schema 4 profile 不再把它们加入 `PATH`。`uv` 和 `uvx` 仍独立安装到 `$INSTALL_BASE/tools/bin`，不由 mise 管理。
+profile 不再覆盖 `XDG_DATA_HOME` 或 `XDG_CACHE_HOME`，其他应用使用系统默认的 `~/.local/share` 和 `~/.cache`；只有 mise 通过专用变量使用 `/data`。旧 nvm、pyenv、rustup 和 Go 目录不会自动删除，但 schema 4 profile 不再把它们加入 `PATH`。`uv` 和 `uvx` 默认由 mise 管理；独立安装分支（`popos_install_uv`）安装到官方默认位置 `~/.local/bin`。
 
 ### Backup & Restore (PopOS)
 

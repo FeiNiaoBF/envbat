@@ -9,17 +9,17 @@ _popos_export_mise_env() {
     export MISE_CARGO_HOME="$MISE_DATA_DIR/cargo"
     export RUSTUP_HOME="$MISE_RUSTUP_HOME"
     export CARGO_HOME="$MISE_CARGO_HOME"
-    export PATH="$MISE_DATA_DIR/shims:$CARGO_HOME/bin:$INSTALL_BASE/tools/bin:$PATH"
+    export PATH="$MISE_DATA_DIR/shims:$CARGO_HOME/bin:$HOME/.local/bin:$PATH"
 }
 
 popos_mise_is_available() {
-    local mise_bin="$INSTALL_BASE/tools/bin/mise"
+    local mise_bin="$HOME/.local/bin/mise"
     [ -x "$mise_bin" ] && "$mise_bin" --version >/dev/null 2>&1
 }
 
 popos_install_mise() {
     echo ">>> 安装 mise <<<"
-    local mise_bin="$INSTALL_BASE/tools/bin/mise"
+    local mise_bin="$HOME/.local/bin/mise"
     local mise_version
     _popos_export_mise_env
 
@@ -44,7 +44,7 @@ popos_install_mise() {
 
 popos_mise_use() {
     local tool="$1" selector="$2"
-    local mise_bin="$INSTALL_BASE/tools/bin/mise"
+    local mise_bin="$HOME/.local/bin/mise"
     local output
     _popos_export_mise_env
     if [ ! -x "$mise_bin" ]; then
@@ -65,7 +65,7 @@ popos_mise_use() {
 
 popos_mise_unuse() {
     local tool="$1"
-    local mise_bin="$INSTALL_BASE/tools/bin/mise"
+    local mise_bin="$HOME/.local/bin/mise"
     local output
     _popos_export_mise_env
     if [ ! -x "$mise_bin" ]; then
@@ -83,7 +83,7 @@ popos_mise_unuse() {
 
 popos_install_uv() {
     echo ">>> 安装 uv (Python 包管理器) <<<"
-    local uv_bin_dir="$INSTALL_BASE/tools/bin"
+    local uv_bin_dir="$HOME/.local/bin"
     local uv_version
 
     if [ -x "$uv_bin_dir/uv" ] && [ -x "$uv_bin_dir/uvx" ] && \
