@@ -76,7 +76,7 @@ popos_verify() {
         failures=$((failures + 1))
     fi
 
-    for path in "$base" "$base/workspace/github" "$base/tools/mise" "$base/cache"; do
+    for path in "$base" "$base/workspace/code" "$base/tools/mise" "$base/cache"; do
         if ! _popos_verify_required_file "核心目录" "$path"; then
             failures=$((failures + 1))
         fi

@@ -8,7 +8,7 @@ popos_create_dirs() {
     local user
     user="$(whoami)"
     local dirs=(
-        "$DATA_HOME/workspace/github" "$DATA_HOME/workspace/local" "$DATA_HOME/workspace/obsidian" "$DATA_HOME/workspace/books"
+        "$DATA_HOME/workspace/code" "$DATA_HOME/workspace/local" "$DATA_HOME/workspace/obsidian" "$DATA_HOME/workspace/books"
         "$DATA_HOME/apps"
         "$DATA_HOME/tools/mise" "$DATA_HOME/tools/fonts"
         "$DATA_HOME/cache/mise"
@@ -74,7 +74,7 @@ popos_prune_legacy_dirs() {
 popos_ensure_symlinks() {
     echo ">>> 确保符号链接 <<<"
     local links=(
-        "Code:$INSTALL_BASE/workspace/github"
+        "Code:$INSTALL_BASE/workspace/code"
         "Projects:$INSTALL_BASE/workspace/local"
         "Data:$INSTALL_BASE"
         "Tools:$INSTALL_BASE/tools"

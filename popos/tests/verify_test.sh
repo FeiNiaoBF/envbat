@@ -14,7 +14,7 @@ test_root=$(mktemp -d)
 trap 'rm -rf -- "$test_root"' EXIT
 HOME="$test_root/home"
 INSTALL_BASE="$test_root/data"
-mkdir -p "$HOME/.config/envbat" "$HOME/.local/bin" "$INSTALL_BASE/workspace/github" "$INSTALL_BASE/tools/mise" "$INSTALL_BASE/cache" "$test_root/bin"
+mkdir -p "$HOME/.config/envbat" "$HOME/.local/bin" "$INSTALL_BASE/workspace/code" "$INSTALL_BASE/tools/mise" "$INSTALL_BASE/cache" "$test_root/bin"
 
 for tool in git curl wget gcc make unzip tar python3 zsh; do
     printf '#!/usr/bin/env bash\nexit 0\n' > "$test_root/bin/$tool"

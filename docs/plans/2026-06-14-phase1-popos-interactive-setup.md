@@ -266,7 +266,7 @@ Append at end of `popos/directories.sh`:
 popos_ensure_symlinks() {
     echo ">>> 确保符号链接 <<<"
     local links=(
-        "Code:$INSTALL_BASE/workspace/github"
+        "Code:$INSTALL_BASE/workspace/code"
         "Projects:$INSTALL_BASE/workspace/local"
         "Data:$INSTALL_BASE"
         "Tools:$INSTALL_BASE/tools"

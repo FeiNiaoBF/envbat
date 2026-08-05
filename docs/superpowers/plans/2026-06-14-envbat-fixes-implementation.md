@@ -72,7 +72,7 @@ INSTALL_BASE="${INSTALL_BASE:-/data}"
 
 # Derived environment variables
 export DATA_HOME="${INSTALL_BASE}"
-export CODE_HOME="${INSTALL_BASE}/workspace/github"
+export CODE_HOME="${INSTALL_BASE}/workspace/code"
 export TOOLS_HOME="${INSTALL_BASE}/tools"
 export HF_HOME="${INSTALL_BASE}/models/huggingface"
 export CARGO_HOME="${INSTALL_BASE}/tools/cargo"

@@ -68,7 +68,7 @@ popos_write_profile() {
         printf 'INSTALL_BASE=%q\n\n' "$INSTALL_BASE"
         cat <<'PROFILE_ENV'
 export DATA_HOME="$INSTALL_BASE"
-export CODE_HOME="$INSTALL_BASE/workspace/github"
+export CODE_HOME="$INSTALL_BASE/workspace/code"
 export TOOLS_HOME="$INSTALL_BASE/tools"
 export TMPDIR="$INSTALL_BASE/cache"
 export MISE_DATA_DIR="$INSTALL_BASE/tools/mise"
