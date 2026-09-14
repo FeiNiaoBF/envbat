@@ -109,7 +109,7 @@ popos_config_shell_chain
 second_config=$(cksum < "$HOME/.zshrc")
 
 [ "$(grep -c '^fi$' "$HOME/.zshrc")" -eq 0 ] || fail "legacy loader left an orphan fi"
-bash -n "$HOME/.zshrc" || fail ".zshrc syntax is invalid after loader migration"
+zsh -n "$HOME/.zshrc" || fail ".zshrc syntax is invalid after loader migration"
 [ "$first_config" = "$second_config" ] || fail ".zshrc loading block is not idempotent"
 profile_line=$(grep -nF "source \"\$HOME/.config/envbat/profile.sh\"" "$HOME/.zshrc" | cut -d: -f1)
 omz_line=$(grep -nF "source \"\$ZSH/oh-my-zsh.sh\"" "$HOME/.zshrc" | cut -d: -f1)
