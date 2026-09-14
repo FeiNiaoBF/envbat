@@ -17,7 +17,17 @@ INSTALL_BASE="$test_root/data"
 mkdir -p "$HOME/.config/envbat" "$HOME/.local/bin" "$INSTALL_BASE/workspace/code" "$INSTALL_BASE/tools/mise" "$INSTALL_BASE/cache" "$test_root/bin"
 
 for tool in git curl wget gcc make unzip tar python3 zsh; do
-    printf '#!/usr/bin/env bash\nexit 0\n' > "$test_root/bin/$tool"
+    if [ "$tool" = zsh ]; then
+        cat > "$test_root/bin/$tool" <<'ZSH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "-n" ] && [ -f "${2:-}" ] && grep -qF '# invalid zsh syntax fixture' "$2"; then
+    exit 1
+fi
+exit 0
+ZSH
+    else
+        printf '#!/usr/bin/env bash\nexit 0\n' > "$test_root/bin/$tool"
+    fi
     chmod +x "$test_root/bin/$tool"
 done
 PATH="$test_root/bin:$PATH"
@@ -37,6 +47,8 @@ INSTALL_MISE=true
 INSTALL_NODE=true
 INSTALL_UV=true
 verify_output=$(popos_verify) || fail_test "valid required setup failed verification"
+grep -q '\[OK\].*\.bashrc 语法$' <<< "$verify_output" || fail_test "bash syntax was not verified"
+grep -q '\[OK\].*\.zshrc 语法$' <<< "$verify_output" || fail_test "zsh syntax was not verified"
 grep -q '\[WARN\].*mise marker' <<< "$verify_output" || fail_test "missing managed mise was not reported"
 grep -q '\[WARN\].*uv marker' <<< "$verify_output" || fail_test "missing managed uv was not reported"
 mkdir -p "$INSTALL_BASE/tools/mise/shims"
@@ -56,6 +68,20 @@ grep -q '\[OK\].*mise$' <<< "$verify_output" || fail_test "managed mise was not 
 grep -q '\[OK\].*Node' <<< "$verify_output" || fail_test "mise-managed Node was not verified"
 grep -q '\[OK\].*uv$' <<< "$verify_output" || fail_test "managed uv was not verified"
 grep -q '\[OK\].*uvx$' <<< "$verify_output" || fail_test "managed uvx was not verified"
+
+printf '%s\n%s\nif [' "$loader" "$source_line" > "$HOME/.bashrc"
+if verify_output=$(popos_verify); then
+    fail_test "invalid bash syntax passed verification"
+fi
+grep -qF "$HOME/.bashrc 语法错误" <<< "$verify_output" || fail_test "invalid bash syntax was not reported"
+printf '%s\n%s\n' "$loader" "$source_line" > "$HOME/.bashrc"
+
+printf '%s\n%s\n# invalid zsh syntax fixture\n' "$loader" "$source_line" > "$HOME/.zshrc"
+if verify_output=$(popos_verify); then
+    fail_test "invalid zsh syntax passed verification"
+fi
+grep -qF "$HOME/.zshrc 语法错误" <<< "$verify_output" || fail_test "invalid zsh syntax was not reported"
+printf '%s\n%s\n' "$loader" "$source_line" > "$HOME/.zshrc"
 
 printf '# loader missing\n' > "$HOME/.zshrc"
 if popos_verify >/dev/null 2>&1; then

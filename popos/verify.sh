@@ -23,6 +23,19 @@ _popos_verify_shell_loader() {
     return 1
 }
 
+_popos_verify_shell_syntax() {
+    local shell_name="$1" rc_file="$2"
+    if [ ! -f "$rc_file" ] || ! command -v "$shell_name" >/dev/null 2>&1; then
+        return 0
+    fi
+    if "$shell_name" -n "$rc_file" >/dev/null 2>&1; then
+        echo "  [OK]   $rc_file 语法"
+        return 0
+    fi
+    echo "  [FAIL] $rc_file 语法错误"
+    return 1
+}
+
 _popos_verify_optional_command() {
     local label="$1" command_name="$2"
     if command -v "$command_name" >/dev/null 2>&1; then
@@ -87,6 +100,8 @@ popos_verify() {
 
     if ! _popos_verify_shell_loader "$HOME/.bashrc"; then failures=$((failures + 1)); fi
     if ! _popos_verify_shell_loader "$HOME/.zshrc"; then failures=$((failures + 1)); fi
+    if ! _popos_verify_shell_syntax bash "$HOME/.bashrc"; then failures=$((failures + 1)); fi
+    if ! _popos_verify_shell_syntax zsh "$HOME/.zshrc"; then failures=$((failures + 1)); fi
 
     for command_name in git curl wget gcc make unzip tar python3 zsh; do
         if command -v "$command_name" >/dev/null 2>&1; then
