@@ -25,9 +25,10 @@ if restore_precheck >/dev/null 2>&1; then
 fi
 
 payload="$test_root/payload"
-mkdir -p "$payload/envbat" "$payload/nvim" "$payload/ssh"
+mkdir -p "$payload/envbat" "$payload/mise" "$payload/nvim" "$payload/ssh"
 printf 'restored zshrc\n' > "$payload/.zshrc"
-printf 'ENVBAT_PROFILE_SCHEMA=2\n' > "$payload/envbat/profile.sh"
+printf 'ENVBAT_PROFILE_SCHEMA=4\n' > "$payload/envbat/profile.sh"
+printf '[tools]\npython = "latest"\n' > "$payload/mise/config.toml"
 printf 'set number\n' > "$payload/nvim/init.vim"
 printf 'private key\n' > "$payload/ssh/id_ed25519"
 mkdir -p "$BACKUP_BASE/valid"
@@ -51,7 +52,8 @@ create_safety_snapshot >/dev/null || fail_test "safety snapshot failed"
 prepare_restore_payload >/dev/null || fail_test "dotfiles payload extraction failed"
 restore_user_state >/dev/null || fail_test "user state restore failed"
 grep -q '^restored zshrc$' "$HOME/.zshrc" || fail_test "zshrc was not restored"
-grep -q 'ENVBAT_PROFILE_SCHEMA=2' "$HOME/.config/envbat/profile.sh" || fail_test "profile was not restored"
+grep -q 'ENVBAT_PROFILE_SCHEMA=4' "$HOME/.config/envbat/profile.sh" || fail_test "profile was not restored"
+[ -f "$HOME/.config/mise/config.toml" ] || fail_test "mise config was not restored"
 [ -f "$HOME/.config/nvim/init.vim" ] || fail_test "Neovim config was not restored"
 
 ask_yes_no() {
