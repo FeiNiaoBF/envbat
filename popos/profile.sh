@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # === Profile Persistence ===
 
-PROFILE_SCHEMA_CURRENT=2
+PROFILE_SCHEMA_CURRENT=4
 PROFILE_DIR="${PROFILE_DIR:-$HOME/.config/envbat}"
 PROFILE_FILE="${PROFILE_FILE:-$PROFILE_DIR/profile.sh}"
 
 popos_profile_conservative_defaults() {
     INSTALL_BASE="${INSTALL_BASE:-/data}"
+    INSTALL_MISE="${INSTALL_MISE:-false}"
     INSTALL_GO="${INSTALL_GO:-false}"
-    INSTALL_NVM_NODE="${INSTALL_NVM_NODE:-false}"
-    INSTALL_PYENV="${INSTALL_PYENV:-false}"
-    INSTALL_RUSTUP="${INSTALL_RUSTUP:-false}"
+    INSTALL_NODE="${INSTALL_NODE:-false}"
+    INSTALL_PYTHON="${INSTALL_PYTHON:-false}"
+    INSTALL_RUST="${INSTALL_RUST:-false}"
     INSTALL_UV="${INSTALL_UV:-false}"
     INSTALL_JAVA="${INSTALL_JAVA:-skip}"
     INSTALL_NEOVIM="${INSTALL_NEOVIM:-false}"
@@ -25,15 +26,15 @@ popos_profile_conservative_defaults() {
     INSTALL_CHROME="${INSTALL_CHROME:-false}"
     GIT_USER_NAME="${GIT_USER_NAME:-}"
     GIT_USER_EMAIL="${GIT_USER_EMAIL:-}"
-    GO_VERSION="${GO_VERSION:-}"
 }
 
 popos_profile_initial_defaults() {
     INSTALL_BASE="${INSTALL_BASE:-/data}"
+    INSTALL_MISE="${INSTALL_MISE:-true}"
     INSTALL_GO="${INSTALL_GO:-true}"
-    INSTALL_NVM_NODE="${INSTALL_NVM_NODE:-true}"
-    INSTALL_PYENV="${INSTALL_PYENV:-true}"
-    INSTALL_RUSTUP="${INSTALL_RUSTUP:-true}"
+    INSTALL_NODE="${INSTALL_NODE:-true}"
+    INSTALL_PYTHON="${INSTALL_PYTHON:-true}"
+    INSTALL_RUST="${INSTALL_RUST:-true}"
     INSTALL_UV="${INSTALL_UV:-true}"
     INSTALL_JAVA="${INSTALL_JAVA:-skip}"
     INSTALL_NEOVIM="${INSTALL_NEOVIM:-true}"
@@ -48,7 +49,6 @@ popos_profile_initial_defaults() {
     INSTALL_CHROME="${INSTALL_CHROME:-false}"
     GIT_USER_NAME="${GIT_USER_NAME:-}"
     GIT_USER_EMAIL="${GIT_USER_EMAIL:-}"
-    GO_VERSION="${GO_VERSION:-}"
 }
 
 popos_write_profile() {
@@ -71,37 +71,42 @@ export DATA_HOME="$INSTALL_BASE"
 export CODE_HOME="$INSTALL_BASE/workspace/github"
 export TOOLS_HOME="$INSTALL_BASE/tools"
 export HF_HOME="$INSTALL_BASE/models/huggingface"
-export CARGO_HOME="$INSTALL_BASE/tools/cargo"
-export XDG_DATA_HOME="$INSTALL_BASE/temp/xdg-data"
-export XDG_CACHE_HOME="$INSTALL_BASE/temp/xdg-cache"
 export TMPDIR="$INSTALL_BASE/temp"
-if [ -d "$TOOLS_HOME/bin" ]; then
-    export PATH="$TOOLS_HOME/bin:$PATH"
-fi
+export MISE_DATA_DIR="$INSTALL_BASE/tools/mise"
+export MISE_CONFIG_DIR="$HOME/.config/mise"
+export MISE_CACHE_DIR="$INSTALL_BASE/cache/mise"
+export MISE_RUSTUP_HOME="$MISE_DATA_DIR/rustup"
+export MISE_CARGO_HOME="$MISE_DATA_DIR/cargo"
+export RUSTUP_HOME="$MISE_RUSTUP_HOME"
+export CARGO_HOME="$MISE_CARGO_HOME"
+export PATH="$TOOLS_HOME/bin:$PATH"
 
 PROFILE_ENV
         local var_name
         for var_name in \
-            INSTALL_GO INSTALL_NVM_NODE INSTALL_PYENV INSTALL_RUSTUP INSTALL_UV INSTALL_JAVA \
+            INSTALL_MISE INSTALL_GO INSTALL_NODE INSTALL_PYTHON INSTALL_RUST INSTALL_UV INSTALL_JAVA \
             INSTALL_NEOVIM INSTALL_DOCKER INSTALL_OHMYZSH INSTALL_SSH INSTALL_EXTRA_TOOLS \
             INSTALL_UFW INSTALL_FAIL2BAN INSTALL_AUTO_UPDATES INSTALL_CHINESE INSTALL_CHROME \
-            GIT_USER_NAME GIT_USER_EMAIL GO_VERSION; do
+            GIT_USER_NAME GIT_USER_EMAIL; do
             printf '%s=%q\n' "$var_name" "${!var_name}"
         done
-        cat <<'PROFILE_TOOLS'
+        cat <<'PROFILE_MISE'
 
-export NVM_DIR="$INSTALL_BASE/tools/nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-
-export PYENV_ROOT="$INSTALL_BASE/tools/pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-if command -v pyenv &>/dev/null; then
-    eval "$(pyenv init -)"
+if [ "${INSTALL_MISE:-false}" = true ]; then
+    export PATH="$MISE_DATA_DIR/shims:$CARGO_HOME/bin:$PATH"
+    if [ -x "$TOOLS_HOME/bin/mise" ]; then
+        case "$-" in
+            *i*)
+                if [ -n "${ZSH_VERSION:-}" ]; then
+                    eval "$("$TOOLS_HOME/bin/mise" activate zsh)"
+                elif [ -n "${BASH_VERSION:-}" ]; then
+                    eval "$("$TOOLS_HOME/bin/mise" activate bash)"
+                fi
+                ;;
+        esac
+    fi
 fi
-
-export RUSTUP_HOME="$INSTALL_BASE/tools/rustup"
-export PATH="${CARGO_HOME}/bin:$PATH"
-PROFILE_TOOLS
+PROFILE_MISE
     } > "$temp_file"
     then
         rm -f -- "$temp_file"
@@ -124,6 +129,17 @@ popos_migrate_profile() {
         fail "旧 profile 备份失败"
         return 1
     fi
+    if [ "${ENVBAT_PROFILE_SCHEMA:-0}" -lt 3 ]; then
+        INSTALL_NODE="${INSTALL_NODE:-${INSTALL_NVM_NODE:-false}}"
+        INSTALL_PYTHON="${INSTALL_PYTHON:-${INSTALL_PYENV:-false}}"
+        INSTALL_RUST="${INSTALL_RUST:-${INSTALL_RUSTUP:-false}}"
+        INSTALL_MISE="${INSTALL_MISE:-false}"
+        if [ "${INSTALL_GO:-false}" = true ] || [ "$INSTALL_NODE" = true ] || \
+            [ "$INSTALL_PYTHON" = true ] || [ "$INSTALL_RUST" = true ] || \
+            [ "${INSTALL_JAVA:-skip}" != skip ]; then
+            INSTALL_MISE=true
+        fi
+    fi
     popos_profile_conservative_defaults
     if [ "$INSTALL_SSH" = restore ]; then
         INSTALL_SSH=skip
@@ -131,7 +147,7 @@ popos_migrate_profile() {
     if ! popos_write_profile; then
         return 1
     fi
-    warn "旧 profile 已保守迁移到 schema v2，备份: $backup"
+    warn "旧 profile 已保守迁移到 schema v4，备份: $backup"
 }
 
 popos_load_profile() {
